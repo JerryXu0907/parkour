@@ -22,11 +22,11 @@ class A1LeapCfg( A1FieldCfg ):
                 "leap",
             ],
             leap= dict(
-                length= (0.2, 1.0),
+                length= (0.5, 1.5),
                 depth= (0.4, 0.8),
                 height= 0.2,
             ),
-            virtual_terrain= False,#True, # Change this to False for real terrain
+            virtual_terrain= True, # Change this to False for real terrain
             no_perlin_threshold= 0.06,
         ))
 
@@ -36,7 +36,7 @@ class A1LeapCfg( A1FieldCfg ):
     
     class commands( A1FieldCfg.commands ):
         class ranges( A1FieldCfg.commands.ranges ):
-            lin_vel_x = [1.0, 1.5]
+            lin_vel_x = [1.5, 3.0]
             lin_vel_y = [0.0, 0.0]
             ang_vel_yaw = [0., 0.]
 
