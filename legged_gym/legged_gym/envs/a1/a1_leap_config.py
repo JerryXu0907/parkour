@@ -95,7 +95,8 @@ class A1LeapCfgPPO( A1FieldCfgPPO ):
         ])
         resume = True
         # load_run = "{Your traind walking model directory}"
-        load_run = "May15_21-34-27_Skillleap_pEnergySubsteps-1e-06_virtual"#"May15_17-07-38_WalkingBase_pEnergySubsteps2e-5_aScale0.5"
+        # load_run = "May15_21-34-27_Skillleap_pEnergySubsteps-1e-06_virtual"#"May15_17-07-38_WalkingBase_pEnergySubsteps2e-5_aScale0.5"
+        load_run = "High_speed_walk"
         # load_run = "{Your virtually trained leap model directory}"
         max_iterations = 20000
         save_interval = 500
