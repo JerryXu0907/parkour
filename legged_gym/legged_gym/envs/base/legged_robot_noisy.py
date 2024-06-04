@@ -30,6 +30,10 @@ class LeggedRobotNoisy(LeggedRobotField):
         return actions_scaled_torque_clipped
 
     def pre_physics_step(self, actions):
+        '''
+            pre_physics_step basically clips the actions so that the actions will not exceeds the limits.
+            also with action delay
+        '''
         self.forward_depth_refreshed = False # incase _get_forward_depth_obs is called multiple times
         self.proprioception_refreshed = False
         return_ = super().pre_physics_step(actions)
@@ -64,6 +68,7 @@ class LeggedRobotNoisy(LeggedRobotField):
     def _compute_torques(self, actions):
         """ The input actions will not be used, instead the scaled clipped actions will be used.
         Please check the computation logic whenever you change anything.
+        calculate the torques on all the dofs according to the actions and PD controller
         """
         if not hasattr(self.cfg.control, "motor_clip_torque"):
             return super()._compute_torques(actions)
@@ -87,6 +92,9 @@ class LeggedRobotNoisy(LeggedRobotField):
             return torques
         
     def post_decimation_step(self, dec_i):
+        '''
+            each torque is done in decimation timesteps
+        '''
         return_ = super().post_decimation_step(dec_i)
         self.max_torques = torch.maximum(
             torch.max(torch.abs(self.torques), dim= -1)[0],
@@ -108,6 +116,9 @@ class LeggedRobotNoisy(LeggedRobotField):
         return return_
     
     def _fill_extras(self, env_ids):
+        '''
+            filling out the extra information for reset envs
+        '''
         return_ = super()._fill_extras(env_ids)
         
         self.extras["episode"]["max_torques"] = self.max_torques[env_ids]
@@ -122,6 +133,10 @@ class LeggedRobotNoisy(LeggedRobotField):
         return return_
     
     def _post_physics_step_callback(self):
+        '''
+            resample delays and commands: especially fixing the headings of the commands since the robot may change
+            the heading during walking
+        '''
         super()._post_physics_step_callback()
 
         if hasattr(self, "actions_history_buffer"):
