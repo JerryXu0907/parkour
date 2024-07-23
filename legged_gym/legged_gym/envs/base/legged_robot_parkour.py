@@ -14,6 +14,7 @@ from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi, torch_rand_sqrt_fl
 from legged_gym.utils.helpers import class_to_dict
 from .legged_robot_config import LeggedRobotCfg
 import cv2
+import numpy as np
 
 class LeggedRobotParkour(LeggedRobot):
 
@@ -136,8 +137,54 @@ class LeggedRobotParkour(LeggedRobot):
                 cv2.waitKey(1)
 
     def check_termination(self):
-        return super().check_termination()
+        super().check_termination()
+        for i in range(len(self.termination_functions)):
+            self.termination_functions[i]()
+
+    def compute_observations(self):
+        for key in self.sensor_handles[0].keys():
+            if "camera" in key:
+                # NOTE: Different from the documentation and examples from isaacgym
+                # gym.fetch_results() must be called before gym.start_access_image_tensors()
+                # refer to https://forums.developer.nvidia.com/t/camera-example-and-headless-mode/178901/10
+                self.gym.fetch_results(self.sim, True)
+                self.gym.step_graphics(self.sim)
+                self.gym.render_all_camera_sensors(self.sim)
+                self.gym.start_access_image_tensors(self.sim)
+                break
+        add_noise = self.add_noise; self.add_noise = False
+        super().compute_observations()
+        self.obs_super_impl = self.obs_buf
+        self.add_noise = add_noise
     
+    def get_obs_segment_from_components(self, components):
+        """ Observation segment is defined as a list of lists/ints defining the tensor shape with
+        corresponding order.
+        """
+        segments = OrderedDict()
+        if "proprioception" in components:
+            segments["proprioception"] = (48,)
+        if "height_measurements" in components:
+            segments["height_measurements"] = (187,)
+        if "forward_depth" in components:
+            segments["forward_depth"] = (1, *self.cfg.sensor.forward_camera.resolution)
+        if "base_pose" in components:
+            segments["base_pose"] = (6,) # xyz + rpy
+        if "robot_config" in components:
+            """ Related to robot_config_buffer attribute, Be careful to change. """
+            # robot shape friction
+            # CoM (Center of Mass) x, y, z
+            # base mass (payload)
+            # motor strength for each joint
+            segments["robot_config"] = (1 + 3 + 1 + 12,)
+        return segments
+    
+    def get_num_obs_from_components(self, components):
+        obs_segments = self.get_obs_segment_from_components(components)
+        num_obs = 0
+        for k, v in obs_segments.items():
+            num_obs += np.prod(v)
+        return num_obs
 
     # ---------CallBacks-------------
     def _post_physics_step_callback(self):
@@ -404,6 +451,98 @@ class LeggedRobotParkour(LeggedRobot):
         target_vec_norm = self.next_target_pos_rel / (norm + 1e-5)
         self.next_target_yaw = torch.atan2(target_vec_norm[:, 1], target_vec_norm[:, 0])
     
+    def _reset_buffers(self, env_ids):
+        super()._reset_buffers(env_ids)
+
+        # additional buffer reset
+        self.last_root_vel[env_ids] = 0.
+        self.cur_goal_idx[env_ids] = 0.
+        self.reach_goal_timer[env_ids] = 0.
+
+        if hasattr(self, "actions_history_buffer"):
+            self.actions_history_buffer[:, env_ids] = 0.
+            self.action_delayed_frames[env_ids] = self.cfg.control.action_history_buffer_length
+        if hasattr(self, "forward_depth_buffer"):
+            self.forward_depth_buffer[:, env_ids] = 0.
+            self.forward_depth_delayed_frames[env_ids] = self.cfg.sensor.forward_camera.buffer_length
+        if hasattr(self, "proprioception_buffer"):
+            self.proprioception_buffer[:, env_ids] = 0.
+            self.proprioception_delayed_frames[env_ids] = self.cfg.sensor.proprioception.buffer_length
+        
+        if hasattr(self, "velocity_sample_points"): self.velocity_sample_points[env_ids] = 0.
+
+        if getattr(self.cfg.domain_rand, "randomize_gravity_bias", False):
+            assert hasattr(self, "gravity_bias")
+            self.gravity_bias[env_ids] = torch.rand_like(self.gravity_bias[env_ids])
+            self.gravity_bias[env_ids, 0] *= self.cfg.domain_rand.gravity_bias_range["x"][1] - self.cfg.domain_rand.gravity_bias_range["x"][0]
+            self.gravity_bias[env_ids, 0] += self.cfg.domain_rand.gravity_bias_range["x"][0]
+            self.gravity_bias[env_ids, 1] *= self.cfg.domain_rand.gravity_bias_range["y"][1] - self.cfg.domain_rand.gravity_bias_range["y"][0]
+            self.gravity_bias[env_ids, 1] += self.cfg.domain_rand.gravity_bias_range["y"][0]
+            self.gravity_bias[env_ids, 2] *= self.cfg.domain_rand.gravity_bias_range["z"][1] - self.cfg.domain_rand.gravity_bias_range["z"][0]
+            self.gravity_bias[env_ids, 2] += self.cfg.domain_rand.gravity_bias_range["z"][0]
+
+        self.max_power_per_timestep[env_ids] = 0.
+
+    # ---------Observation---------------
+    def _get_obs_from_components(self, components: list, privileged= False):
+        obs_segments = self.get_obs_segment_from_components(components)
+        obs = []
+        for k, v in obs_segments.items():
+            if k == "proprioception":
+                obs.append(self._get_proprioception_obs(privileged))
+            elif k == "height_measurements":
+                obs.append(self._get_height_measurements_obs(privileged))
+            else:
+                # get the observation from specific component name
+                # such as "_get_forward_depth_obs"
+                obs.append(
+                    getattr(self, "_get_" + k + "_obs")(privileged) * \
+                    getattr(self.obs_scales, k, 1.)
+                )
+        obs = torch.cat(obs, dim= 1)
+        return obs
+    
+    def _get_proprioception_obs(self, privileged= False):
+        return self.obs_super_impl[:, :48]
+    
+    def _get_height_measurements_obs(self, privileged= False):
+        return self.obs_super_impl[:, 48:235]
+    
+    def _get_forward_depth_obs(self, privileged= False):
+        return torch.stack(self.sensor_tensor_dict["forward_depth"]).flatten(start_dim= 1)
+
+    def _get_base_pose_obs(self, privileged= False):
+        roll, pitch, yaw = get_euler_xyz(self.root_states[:, 3:7])
+        roll[roll > np.pi] -= np.pi * 2 # to range (-pi, pi)
+        pitch[pitch > np.pi] -= np.pi * 2 # to range (-pi, pi)
+        yaw[yaw > np.pi] -= np.pi * 2 # to range (-pi, pi)
+        return torch.cat([
+            self.root_states[:, :3] - self.env_origins,
+            torch.stack([roll, pitch, yaw], dim= -1),
+        ], dim= -1)
+    
+    def _get_robot_config_obs(self, privileged= False):
+        return self.robot_config_buffer
+
+    def _get_engaging_block_obs(self, privileged= False):
+        """ Compute the obstacle info for the robot """
+        if not self.check_BarrierTrack_terrain():
+            # This could be wrong, check BarrierTrack implementation to get the exact shape.
+            return torch.zeros((self.num_envs, (1 + (4 + 1) + 2)), device= self.sim_device)
+        base_positions = self.root_states[:, 0:3] # (n_envs, 3)
+        self.refresh_volume_sample_points()
+        return self.terrain.get_engaging_block_info(
+            base_positions,
+            self.volume_sample_points - base_positions.unsqueeze(-2), # (n_envs, n_points, 3)
+        )
+
+    def _get_sidewall_distance_obs(self, privileged= False):
+        if not self.check_BarrierTrack_terrain():
+            return torch.zeros((self.num_envs, 2), device= self.sim_device)
+        base_positions = self.root_states[:, 0:3] # (n_envs, 3)
+        return self.terrain.get_sidewall_distance(base_positions)
+
+    # -------------Termination----------------
     def _prepare_termination_function(self):
         self.termination_functions = []
         for key in self.cfg.termination.termination_terms:

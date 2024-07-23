@@ -180,7 +180,6 @@ class LeggedRobot(BaseTask):
         # reset robot states
         self._reset_dofs(env_ids)
         self._reset_root_states(env_ids)
-
         self._resample_commands(env_ids)
         self._reset_buffers(env_ids)
 
