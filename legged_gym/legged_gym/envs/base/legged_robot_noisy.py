@@ -5,7 +5,7 @@ from isaacgym import gymtorch, gymapi, gymutil
 import torch
 import torch.nn.functional as F
 import torchvision.transforms as T
-
+from matplotlib import gridspec
 from legged_gym.envs.base.legged_robot_field import LeggedRobotField
 
 class LeggedRobotNoisy(LeggedRobotField):
@@ -288,7 +288,25 @@ class LeggedRobotNoisy(LeggedRobotField):
             if self.num_envs == 1:
                 import matplotlib.pyplot as plt
                 forward_depth_np = self.forward_depth_output[0, 0].detach().cpu().numpy() # (H, W)
-                plt.imshow(forward_depth_np, cmap= "gray", vmin= 0, vmax= 1)
+                print(forward_depth_np.max())
+                
+                gs = gridspec.GridSpec(1, 2, width_ratios=[1, 0.1])
+                # Plot the first image
+                ax1 = plt.subplot(gs[0])
+                imshow_output = ax1.imshow(forward_depth_np * 6, cmap= "gray", vmin= 0, vmax= 6.0)
+                ax1.set_xticks([])
+                ax1.set_yticks([])
+                ax1.set_title("Depth")
+                # Create the colorbar
+                ax3 = plt.subplot(gs[1])
+                cbar = plt.colorbar(imshow_output, ax=ax1, cax=ax3, shrink=0.5)
+                # Customize colorbar ticks to correspond to dB values
+                import numpy as np
+                db_ticks = np.arange(0, 6.1, 1.5)  # Adjust as needed
+                cbar.set_ticks(db_ticks)
+                cbar.set_ticklabels(["{:.01f} m".format(dB) for dB in db_ticks])
+                cbar.set_label('m')
+                cbar.ax.yaxis.set_label_position('right')
                 plt.pause(0.001)
             else:
                 print("LeggedRobotNoisy: More than one robot, stop showing camera image")

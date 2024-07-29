@@ -106,7 +106,7 @@ def play(args):
         # "tilt",
     ]
     env_cfg.terrain.BarrierTrack_kwargs["leap"] = dict(
-            length= (1.0, 1.0),
+            length= (1.4, 1.4),
             depth= (0.4, 0.8),
             height= 0.2,
     )
@@ -129,7 +129,7 @@ def play(args):
     env_cfg.termination.termination_terms = []
     env_cfg.termination.timeout_at_border = False
     env_cfg.termination.timeout_at_finished = False
-    env_cfg.viewer.debug_viz = False # in a1_distill, setting this to true will constantly showing the egocentric depth view.
+    env_cfg.viewer.debug_viz = True #False # in a1_distill, setting this to true will constantly showing the egocentric depth view.
     env_cfg.viewer.draw_volume_sample_points = False
     train_cfg.runner.resume = True
     train_cfg.runner_class_name = "OnPolicyRunner"
@@ -189,6 +189,9 @@ def play(args):
     env.gym.subscribe_viewer_keyboard_event(env.viewer, isaacgym.gymapi.KEY_F, "leftturn")
     env.gym.subscribe_viewer_keyboard_event(env.viewer, isaacgym.gymapi.KEY_G, "rightturn")
     env.gym.subscribe_viewer_keyboard_event(env.viewer, isaacgym.gymapi.KEY_X, "stop")
+    train_cfg.policy.num_actor_obs = 81
+    train_cfg.policy.num_critic_obs = 81
+    train_cfg.policy.num_actor_obs = 81
     # load policy
     ppo_runner, train_cfg = task_registry.make_alg_runner(
         env=env,
@@ -239,6 +242,7 @@ def play(args):
         if "obs_slice" in locals().keys():
             obs_component = obs[:, obs_slice[0]].reshape(-1, *obs_slice[1])
             print(obs_component[robot_index])
+        obs = torch.cat([obs[:, :48], obs[:, 48 + 48*64:]], dim=-1)
         vel_obs = torch.cat([obs[..., :9], obs[..., 12:]], dim=-1)
         velocity = velocity_planner(vel_obs)
         env.commands[..., 0] = velocity.squeeze(-1)

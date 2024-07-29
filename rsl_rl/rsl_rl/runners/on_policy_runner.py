@@ -63,7 +63,7 @@ class OnPolicyRunner:
         ).to(self.device)
 
         velocity_planner = nn.Sequential(
-            nn.Linear(env.num_obs-3, 256),
+            nn.Linear(81-3, 256),
             nn.ELU(),
             nn.Linear(256, 128),
             nn.ELU(),

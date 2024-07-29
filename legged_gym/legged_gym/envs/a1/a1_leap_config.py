@@ -5,13 +5,63 @@ from legged_gym.utils.helpers import merge_dict
 class A1LeapCfg( A1FieldCfg ):
 
     #### uncomment this to train non-virtual terrain
-    # class sensor( A1FieldCfg.sensor ):
-    #     class proprioception( A1FieldCfg.sensor.proprioception ):
-    #         delay_action_obs = True
-    #         latency_range = [0.04-0.0025, 0.04+0.0075]
+    class sensor( A1FieldCfg.sensor ):
+        class forward_camera( A1FieldCfg.sensor.forward_camera ):
+            resolution = [int(240/4), int(424/4)]
+            # position = dict(
+            #     mean= [0.245, 0.0075, 0.072+0.018],
+            #     std= [0.002, 0.002, 0.0005],
+            # ) # position in base_link ##### small randomization
+            # rotation = dict(
+            #     lower= [0, 0, 0],
+            #     upper= [0, 0, 0],
+            # ) # rotation in base_link ##### small randomization
+            ########## new camera extrinsics with 30degree down ####################
+            position = dict(
+                mean= [0.245+0.027, 0.0075, 0.072+0.02],
+                std= [0.002, 0.002, 0.0002],
+            ) # position in base_link ##### small randomization
+            rotation = dict(
+                lower= [0, 0.5, 0], # positive for pitch down
+                upper= [0, 0.54, 0],
+            ) # rotation in base_link ##### small randomization
+            ########## new camera extrinsics with 30degree down  ####################
+            ########## new camera extrinsics with 15degree down ####################
+            # position = dict(
+            #     mean= [0.245+0.027, 0.0075, 0.072+0.018],
+            #     std= [0.003, 0.002, 0.0005],
+            # ) # position in base_link ##### small randomization
+            # rotation = dict(
+            #     lower= [0, 0.24, 0], # positive for pitch down
+            #     upper= [0, 0.28, 0],
+            # ) # rotation in base_link ##### small randomization
+            ########## new camera extrinsics with 15degree down  ####################
+            resized_resolution= [48, 64]
+            output_resolution = [48, 64]
+            horizontal_fov = [85, 87] # measured around 87 degree
+            # for go1, usb2.0, 480x640, d435i camera
+            latency_range = [0.25, 0.30] # [s]
+            # latency_range = [0.28, 0.36] # [s]
+            latency_resample_time = 5.0 # [s]
+            refresh_duration = 1/10 # [s] for (240, 424 option with onboard script fixed to no more than 20Hz)
+            
+            # config to simulate stero RGBD camera
+            crop_top_bottom = [0, 0]
+            crop_left_right = [int(60/4), int(46/4)]
+            depth_range = [0.0, 2.0] # [m]
+
     #### uncomment the above to train non-virtual terrain
     class env(A1FieldCfg.env):
-        num_envs = 4096
+        num_envs = 4#096
+        obs_components = [
+            "proprioception", # 48
+            # "height_measurements", # 187
+            "base_pose",
+            "robot_config",
+            "engaging_block",
+            "sidewall_distance",
+            "forward_depth"
+        ]
     class terrain( A1FieldCfg.terrain ):
         max_init_terrain_level = 2
         border_size = 5
