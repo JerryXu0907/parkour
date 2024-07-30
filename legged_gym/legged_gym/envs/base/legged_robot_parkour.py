@@ -16,6 +16,33 @@ from .legged_robot_config import LeggedRobotCfg
 import cv2
 import numpy as np
 
+'''
+done    __init__
+done    step
+done    post_physics_step
+done    check_termination
+        reset_idx
+        compute_observations
+done    _process_rigid_shape_props
+done    _process_dof_props
+done    _process_rigid_body_props
+done    _post_physics_step_callback
+        _resample_commands
+done    _compute_torques
+        _reset_dofs
+done    _reset_root_states
+        _update_terrain_curriculum
+done    _get_noise_scale_vec
+done    _init_buffers
+done    _create_envs
+        _draw_debug_vis
+
+TODO:
+        _init_goals (add to reset_idx)
+        _sample_goals
+        
+'''
+
 class LeggedRobotParkour(LeggedRobot):
 
     # ------------init--------------
@@ -186,6 +213,34 @@ class LeggedRobotParkour(LeggedRobot):
             num_obs += np.prod(v)
         return num_obs
 
+    def reset_idx(self, env_ids):
+        """ Reset some environments.
+            Calls self._reset_dofs(env_ids), self._reset_root_states(env_ids), and self._resample_commands(env_ids)
+            [Optional] calls self._update_terrain_curriculum(env_ids), self.update_command_curriculum(env_ids) and
+            Logs episode info
+            Resets some buffers
+
+        Args:
+            env_ids (list[int]): List of environment ids which must be reset
+        """
+        if len(env_ids) == 0:
+            return
+        
+        # reset the terrain
+        # random initialization of the terrain
+
+        # update curriculum
+        if self.cfg.terrain.curriculum:
+            self._update_terrain_curriculum(env_ids)
+        
+        self._fill_extras(env_ids)
+
+        # reset robot states
+        self._reset_dofs(env_ids)           # dof states no need to change, or we can add some initial velocities to the dofs (limbs)
+        self._reset_root_states(env_ids)    # this is the part for changing the init root_states
+        self._resample_commands(env_ids)
+        self._reset_buffers(env_ids)
+
     # ---------CallBacks-------------
     def _post_physics_step_callback(self):
         super()._post_physics_step_callback()
@@ -254,6 +309,7 @@ class LeggedRobotParkour(LeggedRobot):
         # additional data initializations
         self.reach_goal_timer = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
         self.sensor_tensor_dict = defaultdict(list)
+        self.init_base_vel = torch.zeros(self.num_envs, 6, dtype=torch.float, device=self.device, requires_grad=False)
 
         # gym sensing tensors
         for env_i, env_handle in enumerate(self.envs):
@@ -458,6 +514,7 @@ class LeggedRobotParkour(LeggedRobot):
         self.last_root_vel[env_ids] = 0.
         self.cur_goal_idx[env_ids] = 0.
         self.reach_goal_timer[env_ids] = 0.
+        self.init_base_vel[env_ids] = self.root_states[env_ids, 7:13]
 
         if hasattr(self, "actions_history_buffer"):
             self.actions_history_buffer[:, env_ids] = 0.
@@ -482,6 +539,97 @@ class LeggedRobotParkour(LeggedRobot):
             self.gravity_bias[env_ids, 2] += self.cfg.domain_rand.gravity_bias_range["z"][0]
 
         self.max_power_per_timestep[env_ids] = 0.
+    
+    def _get_noise_scale_vec(self, cfg):
+        noise_vec = torch.zeros_like(self.obs_buf[0])
+        self.add_noise = cfg.noise.add_noise
+        
+        segment_start_idx = 0
+        obs_segments = self.get_obs_segment_from_components(cfg.env.obs_components)
+        # write noise for each corresponding component.
+        for k, v in obs_segments.items():
+            segment_length = np.prod(v)
+            # write sensor scale to provided noise_vec
+            # for example "_write_forward_depth_noise"
+            getattr(self, "_write_" + k + "_noise")(noise_vec[segment_start_idx: segment_start_idx + segment_length])
+            segment_start_idx += segment_length
+
+        return noise_vec
+
+    def _compute_torques(self, actions):    
+        if not hasattr(self.cfg.control, "motor_clip_torque"):
+            if hasattr(self, "motor_strength"):
+                actions = self.motor_strength * actions
+            return super()._compute_torques(actions)
+        else:
+            if hasattr(self, "motor_strength"):
+                actions_scaled_torque_clipped = self.motor_strength * self.actions_scaled_torque_clipped
+            else:
+                actions_scaled_torque_clipped = self.actions_scaled_torque_clipped
+            control_type = self.cfg.control.control_type
+            if control_type == "P":
+                torques = self.p_gains * (actions_scaled_torque_clipped + self.default_dof_pos - self.dof_pos) \
+                    - self.d_gains * self.dof_vel
+            else:
+                raise NotImplementedError
+            if self.cfg.control.motor_clip_torque:
+                torques = torch.clip(
+                    torques,
+                    -self.torque_limits * self.cfg.control.motor_clip_torque,
+                    self.torque_limits * self.cfg.control.motor_clip_torque,
+                )
+            return torques
+    
+
+    # -Process robot physical properties-
+    def _process_rigid_shape_props(self, props, env_id):
+        props = super()._process_rigid_shape_props(props, env_id)
+        if env_id == 0:
+            all_obs_components = self.all_obs_components
+            if "robot_config" in all_obs_components:
+                all_obs_components
+                self.robot_config_buffer = torch.empty(
+                    self.num_envs, 1 + 3 + 1 + 12,
+                    dtype= torch.float32,
+                    device= self.device,
+                )
+        
+        if hasattr(self, "robot_config_buffer"):
+            self.robot_config_buffer[env_id, 0] = props[0].friction
+        return props
+    
+    def _process_dof_props(self, props, env_id):
+        props = super()._process_dof_props(props, env_id)
+        if env_id == 0:
+            if hasattr(self.cfg.control, "torque_limits"):
+                if not isinstance(self.cfg.control.torque_limits, (tuple, list)):
+                    self.torque_limits = torch.ones(self.num_dof, dtype= torch.float, device= self.device, requires_grad= False)
+                    self.torque_limits *= self.cfg.control.torque_limits
+                else:
+                    self.torque_limits = torch.tensor(self.cfg.control.torque_limits, dtype= torch.float, device= self.device, requires_grad= False)
+        return props
+
+    def _process_rigid_body_props(self, props, env_id):
+        props = super()._process_rigid_body_props(props, env_id)
+
+        if self.cfg.domain_rand.randomize_com:
+            rng_com_x = self.cfg.domain_rand.com_range.x
+            rng_com_y = self.cfg.domain_rand.com_range.y
+            rng_com_z = self.cfg.domain_rand.com_range.z
+            rand_com = np.random.uniform(
+                [rng_com_x[0], rng_com_y[0], rng_com_z[0]],
+                [rng_com_x[1], rng_com_y[1], rng_com_z[1]],
+                size=(3,),
+            )
+            props[0].com += gymapi.Vec3(*rand_com)
+
+        if hasattr(self, "robot_config_buffer"):
+            self.robot_config_buffer[env_id, 1] = props[0].com.x
+            self.robot_config_buffer[env_id, 2] = props[0].com.y
+            self.robot_config_buffer[env_id, 3] = props[0].com.z
+            self.robot_config_buffer[env_id, 4] = props[0].mass
+            self.robot_config_buffer[env_id, 5:5+12] = self.motor_strength[env_id] if hasattr(self, "motor_strength") else 1.
+        return props
 
     # ---------Observation---------------
     def _get_obs_from_components(self, components: list, privileged= False):

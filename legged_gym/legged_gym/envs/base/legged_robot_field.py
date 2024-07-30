@@ -14,6 +14,10 @@ class LeggedRobotField(LeggedRobot):
     """ NOTE: Most of this class implementation does not depend on the terrain. Check where
     `check_BarrierTrack_terrain` is called to remove the dependency of BarrierTrack terrain.
     """
+    def __init__(self, cfg: LeggedRobotCfg, sim_params, physics_engine, sim_device, headless):
+        print("Using LeggedRobotField.__init__, num_obs and num_privileged_obs will be computed instead of assigned.")
+        cfg.terrain.measure_heights = True # force height measurement that have full obs from parent class implementation.
+        super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
     
     ##### adds-on with sensors #####
     def _create_sensors(self, env_handle=None, actor_handle= None):
@@ -91,17 +95,6 @@ class LeggedRobotField(LeggedRobot):
         return camera_handle
 
     ##### Working on simulation steps #####
-    def step(self, actions, velocity=None):
-        """ Apply actions, simulate, call self.post_physics_step()
-
-        Args:
-            actions (torch.Tensor): Tensor of shape (num_envs, num_actions_per_env)
-        """
-        if velocity is not None:
-            self.commands[:, 0] = velocity
-        super().step(actions)
-        return self.obs_buf, self.privileged_obs_buf, self.rew_buf, self.reset_buf, self.extras
-
     def pre_physics_step(self, actions):
         self.volume_sample_points_refreshed = False
         actions_preprocessed = False
@@ -1033,9 +1026,7 @@ class LeggedRobotField(LeggedRobot):
         world_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.root_states[:, 7:9]), dim= 1)
         return (1 - torch.exp(-world_vel_error/self.cfg.rewards.tracking_sigma)) * engaging_mask # reverse version of tracking reward
 
-    def _reward_lin_pos_x(self):
-        return (self.root_states[:, :3] - self.last_root_pos)[:, 0]
-    
+
     ##### Some helper functions that override parent class attributes #####
     @property
     def all_obs_components(self):

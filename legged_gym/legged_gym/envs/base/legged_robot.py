@@ -403,6 +403,7 @@ class LeggedRobot(BaseTask):
         self.gym.set_dof_state_tensor_indexed(self.sim,
                                               gymtorch.unwrap_tensor(self.all_dof_states),
                                               gymtorch.unwrap_tensor(dof_idx_int32), len(dof_idx_int32))
+        
     def _reset_root_states(self, env_ids):
         """ Resets ROOT states position and velocities of selected environmments
             Sets base position based on the curriculum
@@ -422,6 +423,7 @@ class LeggedRobot(BaseTask):
         else:
             self.root_states[env_ids] = self.base_init_state
             self.root_states[env_ids, :3] += self.env_origins[env_ids]
+        
         # base rotation (roll and pitch)
         if hasattr(self.cfg.domain_rand, "init_base_rot_range"):
             base_roll = torch_rand_float(
