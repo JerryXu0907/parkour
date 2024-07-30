@@ -27,9 +27,9 @@ done    _process_rigid_shape_props
 done    _process_dof_props
 done    _process_rigid_body_props
 done    _post_physics_step_callback
-        _resample_commands
+no      _resample_commands
 done    _compute_torques
-        _reset_dofs
+        _reset_dofs (no need for now)
 done    _reset_root_states
         _update_terrain_curriculum
 done    _get_noise_scale_vec
@@ -168,22 +168,6 @@ class LeggedRobotParkour(LeggedRobot):
         for i in range(len(self.termination_functions)):
             self.termination_functions[i]()
 
-    def compute_observations(self):
-        for key in self.sensor_handles[0].keys():
-            if "camera" in key:
-                # NOTE: Different from the documentation and examples from isaacgym
-                # gym.fetch_results() must be called before gym.start_access_image_tensors()
-                # refer to https://forums.developer.nvidia.com/t/camera-example-and-headless-mode/178901/10
-                self.gym.fetch_results(self.sim, True)
-                self.gym.step_graphics(self.sim)
-                self.gym.render_all_camera_sensors(self.sim)
-                self.gym.start_access_image_tensors(self.sim)
-                break
-        add_noise = self.add_noise; self.add_noise = False
-        super().compute_observations()
-        self.obs_super_impl = self.obs_buf
-        self.add_noise = add_noise
-    
     def get_obs_segment_from_components(self, components):
         """ Observation segment is defined as a list of lists/ints defining the tensor shape with
         corresponding order.
@@ -580,8 +564,12 @@ class LeggedRobotParkour(LeggedRobot):
                 )
             return torques
     
+    # TODO: place holders for init all the goals, can be put in
+    # terrain composition
+    def _init_goals(self):
+        pass
 
-    # -Process robot physical properties-
+    # ----Process robot physical properties----
     def _process_rigid_shape_props(self, props, env_id):
         props = super()._process_rigid_shape_props(props, env_id)
         if env_id == 0:
@@ -632,25 +620,42 @@ class LeggedRobotParkour(LeggedRobot):
         return props
 
     # ---------Observation---------------
+    def compute_observations(self):
+        for key in self.sensor_handles[0].keys():
+            if "camera" in key:
+                # NOTE: Different from the documentation and examples from isaacgym
+                # gym.fetch_results() must be called before gym.start_access_image_tensors()
+                # refer to https://forums.developer.nvidia.com/t/camera-example-and-headless-mode/178901/10
+                self.gym.fetch_results(self.sim, True)
+                self.gym.step_graphics(self.sim)
+                self.gym.render_all_camera_sensors(self.sim)
+                self.gym.start_access_image_tensors(self.sim)
+                break
+        add_noise = self.add_noise; self.add_noise = False
+        super().compute_observations()
+        self.obs_super_impl = self.obs_buf
+        self.add_noise = add_noise
+
     def _get_obs_from_components(self, components: list, privileged= False):
         obs_segments = self.get_obs_segment_from_components(components)
         obs = []
         for k, v in obs_segments.items():
-            if k == "proprioception":
-                obs.append(self._get_proprioception_obs(privileged))
-            elif k == "height_measurements":
-                obs.append(self._get_height_measurements_obs(privileged))
-            else:
-                # get the observation from specific component name
-                # such as "_get_forward_depth_obs"
-                obs.append(
-                    getattr(self, "_get_" + k + "_obs")(privileged) * \
-                    getattr(self.obs_scales, k, 1.)
-                )
+            # if k == "proprioception":
+            #     obs.append(self._get_proprioception_obs(privileged))
+            # elif k == "height_measurements":
+            #     obs.append(self._get_height_measurements_obs(privileged))
+            # else:
+            #     # get the observation from specific component name
+            #     # such as "_get_forward_depth_obs"
+            obs.append(
+                getattr(self, "_get_" + k + "_obs")(privileged) * \
+                getattr(self.obs_scales, k, 1.)
+            )
         obs = torch.cat(obs, dim= 1)
         return obs
     
     def _get_proprioception_obs(self, privileged= False):
+
         return self.obs_super_impl[:, :48]
     
     def _get_height_measurements_obs(self, privileged= False):
