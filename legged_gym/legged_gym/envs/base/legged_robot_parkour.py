@@ -21,8 +21,14 @@ done    __init__
 done    step
 done    post_physics_step
 done    check_termination
-        reset_idx
-        compute_observations
+        _fill_extras
+done    reset_idx
+
+done    compute_observations
+        |
+        |-  _get_proprioception_obs
+        |-  _get_prop_history_obs
+
 done    _process_rigid_shape_props
 done    _process_dof_props
 done    _process_rigid_body_props
@@ -36,10 +42,12 @@ done    _get_noise_scale_vec
 done    _init_buffers
 done    _create_envs
         _draw_debug_vis
+            |- draw goals
+            |- draw delta v, delta d
 
 TODO:
         _init_goals (add to reset_idx)
-        _sample_goals
+        _reset_goals
         
 '''
 
@@ -224,6 +232,7 @@ class LeggedRobotParkour(LeggedRobot):
         self._reset_root_states(env_ids)    # this is the part for changing the init root_states
         self._resample_commands(env_ids)
         self._reset_buffers(env_ids)
+        self._reset_goals(env_ids)
 
     # ---------CallBacks-------------
     def _post_physics_step_callback(self):
@@ -564,9 +573,13 @@ class LeggedRobotParkour(LeggedRobot):
                 )
             return torques
     
+    # ---------- Setting Goals ---------
     # TODO: place holders for init all the goals, can be put in
     # terrain composition
     def _init_goals(self):
+        pass
+
+    def _reset_goals(self, env_ids):
         pass
 
     # ----Process robot physical properties----
@@ -655,11 +668,35 @@ class LeggedRobotParkour(LeggedRobot):
         return obs
     
     def _get_proprioception_obs(self, privileged= False):
-
-        return self.obs_super_impl[:, :48]
+        imu_obs = torch.stack((self.roll, self.pitch), dim=1)
+        self.delta_yaw = self.target_yaw - self.yaw
+        self.delta_next_yaw = self.next_target_yaw - self.yaw        
+        obs_buf = torch.cat((self.base_ang_vel  * self.obs_scales.ang_vel,   # 3
+                            imu_obs,    # 2
+                            self.delta_yaw[:, None],            # 1
+                            self.delta_next_yaw[:, None],       # 1  
+                            # self.commands[:, 0:1],  #[1,1]
+                            (self.dof_pos) * self.obs_scales.dof_pos,   #  3
+                            self.dof_vel * self.obs_scales.dof_vel,
+                            self.last_actions,
+                            self.contact_filt.float()-0.5,
+                            ),dim=-1)
+        self.obs_history_buf = torch.where(
+            (self.episode_length_buf <= 1)[:, None, None], 
+            torch.stack([obs_buf] * self.cfg.env.history_len, dim=1),
+            torch.cat([
+                self.obs_history_buf[:, 1:],
+                obs_buf.unsqueeze(1)
+            ], dim=1)
+        )
+        return obs_buf
+    
+    def _get_prop_history_obs(self, privileged=False):
+        return self.obs_history_buf
     
     def _get_height_measurements_obs(self, privileged= False):
-        return self.obs_super_impl[:, 48:235]
+        heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.3 - self.measured_heights, -1, 1.)
+        return heights
     
     def _get_forward_depth_obs(self, privileged= False):
         return torch.stack(self.sensor_tensor_dict["forward_depth"]).flatten(start_dim= 1)
@@ -718,4 +755,6 @@ class LeggedRobotParkour(LeggedRobot):
             self.reset_buf |= height_low_cutoff
             self.reset_buf |= height_high_cutoff
     
-    
+    # -----------Debug-------------------
+    def _draw_debug_vis(self):
+        return super()._draw_debug_vis()
