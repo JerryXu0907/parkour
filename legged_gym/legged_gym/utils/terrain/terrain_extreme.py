@@ -62,7 +62,7 @@ class Terrain:
         # self.env_slope_vec = np.zeros((cfg.num_rows, cfg.num_cols, 3))
 
         # goals should be only one
-        self.goals = np.zeros((cfg.num_rows, cfg.num_cols, 3))
+        self.goals = np.zeros((cfg.num_rows, cfg.num_cols, 1, 3))
 
         self.width_per_env_pixels = int(self.env_width / cfg.horizontal_scale)
         self.length_per_env_pixels = int(self.env_length / cfg.horizontal_scale)
@@ -72,15 +72,15 @@ class Terrain:
         self.tot_rows = int(cfg.num_rows * self.length_per_env_pixels) + 2 * self.border
 
         self.height_field_raw = np.zeros((self.tot_rows , self.tot_cols), dtype=np.int16)
-        if cfg.curriculum:
-            self.curriculum()
-        elif cfg.selected:
-            self.selected_terrain()
-        else:    
-            if hasattr(cfg, "max_difficulty"):
-                self.curriculum(random=True, max_difficulty=cfg.max_difficulty)
-            else:
-                self.curriculum(random=True)
+        # if cfg.curriculum:
+        self.curriculum()
+        # elif cfg.selected:
+        #     self.selected_terrain()
+        # else:    
+        #     if hasattr(cfg, "max_difficulty"):
+        #         self.curriculum(random=True, max_difficulty=cfg.max_difficulty)
+        #     else:
+        #         self.curriculum(random=True)
             # self.randomized_terrain()   
         
         self.heightsamples = self.height_field_raw
@@ -120,20 +120,13 @@ class Terrain:
             self.add_terrain_to_map(terrain, i, j)
         
     def curriculum(self, random=False, max_difficulty=False):
-        # self.goal_vec_ranges is a 3 vector
-        
+        # self.goal_vec_ranges is a 3x2 vector
         for j in range(self.cfg.num_cols):
+            height = [(self.goal_vec_ranges[-1, -1] - self.goal_vec_ranges[-1, 0]) / self.cfg.num_cols * j + self.goal_vec_ranges[-1, 0],]
+            print(height)
             for i in range(self.cfg.num_rows):
                 difficulty = i / (self.cfg.num_rows-1)
-                choice = j / self.cfg.num_cols + 0.001
-                if random:
-                    if max_difficulty:
-                        terrain = self.make_terrain(choice, np.random.uniform(0.7, 1))
-                    else:
-                        terrain = self.make_terrain(choice, np.random.uniform(0, 1))
-                else:
-                    terrain = self.make_terrain(choice, difficulty)
-
+                terrain = self.make_terrain_goal(height, difficulty)
                 self.add_terrain_to_map(terrain, i, j)
 
     def selected_terrain(self):
@@ -178,7 +171,7 @@ class Terrain:
         else:
             env_origin_z = np.max(terrain.height_field_raw[x1:x2, y1:y2])*terrain.vertical_scale
         self.env_origins[i, j] = [env_origin_x, env_origin_y, env_origin_z]
-        self.terrain_type[i, j] = terrain.idx
+        # self.terrain_type[i, j] = terrain.idx
         self.goals[i, j, :, :2] = terrain.goals + [i * self.env_length, j * self.env_width]
         # self.env_slope_vec[i, j] = terrain.slope_vector
 
@@ -195,7 +188,6 @@ class Terrain:
         else:
             gap_size = 0.1 + difficulty * 1.
             parkour_gap_terrain(terrain,
-                                num_gaps=1,
                                 gap_size=gap_size,
                                 gap_depth=[0.2, 1],
                                 pad_height=0,
@@ -208,10 +200,10 @@ class Terrain:
         return terrain
     
 def parkour_gap_terrain(terrain,
-                           platform_len=0.5, 
+                           platform_len=0.2, 
                            platform_height=0., 
                            gap_size=0.3,
-                           x_range=[0.3, 1.0],
+                           x_range=[0.3, 0.6],
                            y_range=[-1.2, 1.2],
                            half_valid_width=[0.6, 1.2],
                            gap_depth=-200,
@@ -260,7 +252,7 @@ def parkour_gap_terrain(terrain,
     terrain.height_field_raw[-pad_width:, :] = pad_height
 
 def parkour_step_terrain(terrain,
-                        platform_len=0.5, 
+                        platform_len=1.5, 
                         platform_height=0., 
                         num_stones=1,
                         x_range=[0.2, 0.4],
@@ -277,7 +269,8 @@ def parkour_step_terrain(terrain,
     dis_x_max = round( (x_range[1] + step_height) / terrain.horizontal_scale)
     dis_y_min = round(y_range[0] / terrain.horizontal_scale)
     dis_y_max = round(y_range[1] / terrain.horizontal_scale)
-
+    if step_height < 0:
+        platform_height = -step_height
     step_height = round(step_height / terrain.vertical_scale)
 
     half_valid_width = round(np.random.uniform(half_valid_width[0], half_valid_width[1]) / terrain.horizontal_scale)
@@ -292,7 +285,7 @@ def parkour_step_terrain(terrain,
     for i in range(num_stones):
         rand_x = np.random.randint(dis_x_min, dis_x_max)
         rand_y = np.random.randint(dis_y_min, dis_y_max)
-        if i < num_stones // 2:
+        if i <= num_stones // 2:
             stair_height += step_height
         elif i > num_stones // 2:
             stair_height -= step_height
@@ -303,6 +296,7 @@ def parkour_step_terrain(terrain,
         
         last_dis_x = dis_x
         goals[i] = [dis_x-rand_x//2, mid_y+rand_y]
+    terrain.height_field_raw[dis_x:, :] = stair_height
     final_dis_x = dis_x + np.random.randint(dis_x_min, dis_x_max)
     # import ipdb; ipdb.set_trace()
     if final_dis_x > terrain.width:
@@ -395,9 +389,56 @@ def convert_heightfield_to_trimesh(height_field_raw, horizontal_scale, vertical_
     return vertices, triangles, move_x != 0
 
 if __name__ == "__main__":
+
+    class terrain(LeggedRobotCfg.terrain):
+        mesh_type = 'trimesh' # "heightfield" # none, plane, heightfield or trimesh
+        hf2mesh_method = "grid"  # grid or fast
+        max_error = 0.1 # for fast
+        max_error_camera = 2
+
+        y_range = [-0.4, 0.4]
+        
+        edge_width_thresh = 0.05
+        horizontal_scale = 0.05 # [m] influence computation time by a lot
+        horizontal_scale_camera = 0.1
+        vertical_scale = 0.005 # [m]
+        border_size = 5 # [m]
+        height = [0.02, 0.06]
+        simplify_grid = False
+        gap_size = [0.02, 0.1]
+        stepping_stone_distance = [0.02, 0.08]
+        downsampled_scale = 0.075
+        curriculum = True
+
+        all_vertical = False
+        no_flat = True
+        
+        static_friction = 1.0
+        dynamic_friction = 1.0
+        restitution = 0.
+        measure_heights = True
+        measured_points_x = [-0.45, -0.3, -0.15, 0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1.05, 1.2] # 1mx1.6m rectangle (without center line)
+        measured_points_y = [-0.75, -0.6, -0.45, -0.3, -0.15, 0., 0.15, 0.3, 0.45, 0.6, 0.75]
+        measure_horizontal_noise = 0.0
+
+        selected = False # select a unique terrain type and pass all arguments
+        terrain_kwargs = None # Dict of arguments for selected terrain
+        max_init_terrain_level = 5 # starting curriculum state
+        terrain_length = 4.
+        terrain_width = 4
+        num_rows= 10 # number of terrain rows (levels)  # spreaded is benifitiall !
+        num_cols = 40 # number of terrain cols (types)
+        
+        goal_vec_ranges = np.array([[0., 0.], [0., 0.], [-0.5, 0.5]])
+        # trimesh only:
+        slope_treshold = 1.5# slopes above this threshold will be corrected to vertical surfaces
+        origin_zero_z = True
+
+        num_goals = 1
+
     from isaacgym import gymutil, gymapi
     gym = gymapi.acquire_gym()
-
+    cfg = terrain()
     # parse arguments
     args = gymutil.parse_arguments()
 
@@ -423,13 +464,16 @@ if __name__ == "__main__":
 
     # load ball asset
     import os
-    asset_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, os.pardir, "assets")
+    # asset_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, os.pardir, "assets")
+    asset_root = "/home/jerryxu/Desktop/isaacgym/assets"
     asset_file = "urdf/ball.urdf"
     asset = gym.load_asset(sim, asset_root, asset_file, gymapi.AssetOptions())
 
     # set up the env grid
-    num_envs = 800
-    num_per_row = 80
+    cfg.num_rows = 2
+    cfg.num_cols = 4
+    cfg.num_envs = 64
+
     env_spacing = 0.56
     env_lower = gymapi.Vec3(-env_spacing, -env_spacing, 0.0)
     env_upper = gymapi.Vec3(env_spacing, env_spacing, env_spacing)
@@ -441,9 +485,9 @@ if __name__ == "__main__":
     envs = []
     # set random seed
     np.random.seed(17)
-    for i in range(num_envs):
+    for i in range(cfg.num_envs):
         # create env
-        env = gym.create_env(sim, env_lower, env_upper, num_per_row)
+        env = gym.create_env(sim, env_lower, env_upper, int(np.sqrt(cfg.num_envs)))
         envs.append(env)
 
         # generate random bright color
@@ -455,39 +499,18 @@ if __name__ == "__main__":
 
     # create a local copy of initial state, which we can send back for reset
     initial_state = np.copy(gym.get_sim_rigid_body_states(sim, gymapi.STATE_ALL))
-
-    # create all available terrain types
-    num_terains = 8
-    terrain_width = 12.
-    terrain_length = 12.
-    horizontal_scale = 0.25  # [m]
-    vertical_scale = 0.005  # [m]
-    num_rows = int(terrain_width/horizontal_scale)
-    num_cols = int(terrain_length/horizontal_scale)
-    heightfield = np.zeros((num_terains*num_rows, num_cols), dtype=np.int16)
-
-
-    def new_sub_terrain(): return SubTerrain(width=num_rows, length=num_cols, vertical_scale=vertical_scale, horizontal_scale=horizontal_scale)
-
-
-    heightfield[0:num_rows, :] = random_uniform_terrain(new_sub_terrain(), min_height=-0.2, max_height=0.2, step=0.2, downsampled_scale=0.5).height_field_raw
-    heightfield[num_rows:2*num_rows, :] = sloped_terrain(new_sub_terrain(), slope=-0.5).height_field_raw
-    heightfield[2*num_rows:3*num_rows, :] = pyramid_sloped_terrain(new_sub_terrain(), slope=-0.5).height_field_raw
-    heightfield[3*num_rows:4*num_rows, :] = discrete_obstacles_terrain(new_sub_terrain(), max_height=0.5, min_size=1., max_size=5., num_rects=20).height_field_raw
-    heightfield[4*num_rows:5*num_rows, :] = wave_terrain(new_sub_terrain(), num_waves=2., amplitude=1.).height_field_raw
-    heightfield[5*num_rows:6*num_rows, :] = stairs_terrain(new_sub_terrain(), step_width=0.75, step_height=-0.5).height_field_raw
-    heightfield[6*num_rows:7*num_rows, :] = pyramid_stairs_terrain(new_sub_terrain(), step_width=0.75, step_height=-0.5).height_field_raw
-    heightfield[7*num_rows:8*num_rows, :] = stepping_stones_terrain(new_sub_terrain(), stone_size=1.,
-                                                                    stone_distance=1., max_height=0.5, platform_size=0.).height_field_raw
-
-    # add the terrain as a triangle mesh
-    vertices, triangles = convert_heightfield_to_trimesh(heightfield, horizontal_scale=horizontal_scale, vertical_scale=vertical_scale, slope_threshold=1.5)
+    t = Terrain(cfg, cfg.num_envs)
     tm_params = gymapi.TriangleMeshParams()
-    tm_params.nb_vertices = vertices.shape[0]
-    tm_params.nb_triangles = triangles.shape[0]
-    tm_params.transform.p.x = -1.
-    tm_params.transform.p.y = -1.
-    gym.add_triangle_mesh(sim, vertices.flatten(), triangles.flatten(), tm_params)
+    tm_params.nb_vertices = t.vertices.shape[0]
+    tm_params.nb_triangles = t.triangles.shape[0]
+    tm_params.transform.p.x = -cfg.border_size 
+    tm_params.transform.p.y = -cfg.border_size
+    tm_params.transform.p.z = 0.0
+    tm_params.static_friction = cfg.static_friction
+    tm_params.dynamic_friction = cfg.dynamic_friction
+    tm_params.restitution = cfg.restitution
+
+    gym.add_triangle_mesh(sim, t.vertices.flatten(), t.triangles.flatten(), tm_params)
 
     # create viewer
     viewer = gym.create_viewer(sim, gymapi.CameraProperties())
@@ -501,6 +524,29 @@ if __name__ == "__main__":
 
     # subscribe to spacebar event for reset
     gym.subscribe_viewer_keyboard_event(viewer, gymapi.KEY_R, "reset")
+    gym.subscribe_viewer_keyboard_event(
+        viewer, gymapi.KEY_ESCAPE, "QUIT")
+    gym.subscribe_viewer_keyboard_event(
+        viewer, gymapi.KEY_V, "toggle_viewer_sync")
+    gym.subscribe_viewer_keyboard_event(
+        viewer, gymapi.KEY_F, "free_cam")
+    for i in range(9):
+        gym.subscribe_viewer_keyboard_event(
+        viewer, getattr(gymapi, "KEY_"+str(i)), "lookat"+str(i))
+    gym.subscribe_viewer_keyboard_event(
+        viewer, gymapi.KEY_LEFT_BRACKET, "prev_id")
+    gym.subscribe_viewer_keyboard_event(
+        viewer, gymapi.KEY_RIGHT_BRACKET, "next_id")
+    gym.subscribe_viewer_keyboard_event(
+        viewer, gymapi.KEY_SPACE, "pause")
+    gym.subscribe_viewer_keyboard_event(
+        viewer, gymapi.KEY_W, "vx_plus")
+    gym.subscribe_viewer_keyboard_event(
+        viewer, gymapi.KEY_S, "vx_minus")
+    gym.subscribe_viewer_keyboard_event(
+        viewer, gymapi.KEY_A, "left_turn")
+    gym.subscribe_viewer_keyboard_event(
+        viewer, gymapi.KEY_D, "right_turn")
 
     while not gym.query_viewer_has_closed(viewer):
 
