@@ -172,7 +172,7 @@ class Terrain:
             env_origin_z = np.max(terrain.height_field_raw[x1:x2, y1:y2])*terrain.vertical_scale
         self.env_origins[i, j] = [env_origin_x, env_origin_y, env_origin_z]
         # self.terrain_type[i, j] = terrain.idx
-        self.goals[i, j, :, :2] = terrain.goals + [i * self.env_length, j * self.env_width]
+        self.goals[i, j] = terrain.goals + [i * self.env_length, j * self.env_width, 0]
         # self.env_slope_vec[i, j] = terrain.slope_vector
 
     def make_terrain_goal(self, goal_vec, difficulty):
@@ -210,7 +210,7 @@ def parkour_gap_terrain(terrain,
                            pad_width=0.1,
                            pad_height=0.5,
                            flat=False):
-    goals = np.zeros((1, 2))
+    goals = np.zeros((1, 3))
     mid_y = terrain.length // 2  # length is actually y width
     # dis_y_min = round(y_range[0] / terrain.horizontal_scale)
     # dis_y_max = round(y_range[1] / terrain.horizontal_scale)
@@ -239,7 +239,7 @@ def parkour_gap_terrain(terrain,
 
     # terrain.height_field_raw[last_dis_x:dis_x, :mid_y+rand_y-half_valid_width] = gap_depth
     # terrain.height_field_raw[last_dis_x:dis_x, mid_y+rand_y+half_valid_width:] = gap_depth
-    goals[0] = [dis_x-rand_x//2, mid_y]# + rand_y]    
+    goals[0] = [dis_x-rand_x//2, mid_y, 0]# + rand_y]    
     terrain.goals = goals * terrain.horizontal_scale
     
     # terrain.height_field_raw[:, :] = 0
@@ -262,7 +262,7 @@ def parkour_step_terrain(terrain,
                         pad_width=0.1,
                         pad_height=0.5):
     
-    goals = np.zeros((1, 2))
+    goals = np.zeros((1, 3))
     mid_y = terrain.length // 2  # length is actually y width
 
     dis_x_min = round( (x_range[0] + step_height) / terrain.horizontal_scale)
@@ -295,7 +295,7 @@ def parkour_step_terrain(terrain,
         # terrain.height_field_raw[last_dis_x:dis_x, mid_y+rand_y+half_valid_width:] = 0
         
         last_dis_x = dis_x
-        goals[i] = [dis_x-rand_x//2, mid_y+rand_y]
+        goals[i] = [dis_x-rand_x//2, mid_y+rand_y, step_height]
     terrain.height_field_raw[dis_x:, :] = stair_height
     final_dis_x = dis_x + np.random.randint(dis_x_min, dis_x_max)
     # import ipdb; ipdb.set_trace()
