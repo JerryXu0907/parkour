@@ -50,16 +50,11 @@ class Terrain:
         self.env_length = cfg.terrain_length
         self.env_width = cfg.terrain_width
 
-        # get terrain proportions
-        cfg.terrain_proportions = np.array(cfg.terrain_proportions) / np.sum(cfg.terrain_proportions)
-        self.proportions = [np.sum(cfg.terrain_proportions[:i+1]) for i in range(len(cfg.terrain_proportions))]
-
         self.goal_vec_ranges = self.cfg.goal_vec_ranges
         # calculate total sub-terrains
         self.cfg.num_sub_terrains = cfg.num_rows * cfg.num_cols
         self.env_origins = np.zeros((cfg.num_rows, cfg.num_cols, 3))
-        # self.terrain_type = np.zeros((cfg.num_rows, cfg.num_cols))
-        # self.env_slope_vec = np.zeros((cfg.num_rows, cfg.num_cols, 3))
+        self.env_goals = np.zeros((cfg.num_rows, cfg.num_cols, 3))
 
         # goals should be only one
         self.goals = np.zeros((cfg.num_rows, cfg.num_cols, 1, 3))
@@ -72,16 +67,7 @@ class Terrain:
         self.tot_rows = int(cfg.num_rows * self.length_per_env_pixels) + 2 * self.border
 
         self.height_field_raw = np.zeros((self.tot_rows , self.tot_cols), dtype=np.int16)
-        # if cfg.curriculum:
         self.curriculum()
-        # elif cfg.selected:
-        #     self.selected_terrain()
-        # else:    
-        #     if hasattr(cfg, "max_difficulty"):
-        #         self.curriculum(random=True, max_difficulty=cfg.max_difficulty)
-        #     else:
-        #         self.curriculum(random=True)
-            # self.randomized_terrain()   
         
         self.heightsamples = self.height_field_raw
         if self.type=="trimesh":
@@ -122,8 +108,7 @@ class Terrain:
     def curriculum(self, random=False, max_difficulty=False):
         # self.goal_vec_ranges is a 3x2 vector
         for j in range(self.cfg.num_cols):
-            height = [(self.goal_vec_ranges[-1, -1] - self.goal_vec_ranges[-1, 0]) / self.cfg.num_cols * j + self.goal_vec_ranges[-1, 0],]
-            print(height)
+            height = [(self.goal_vec_ranges[-1][-1] - self.goal_vec_ranges[-1][0]) / self.cfg.num_cols * j + self.goal_vec_ranges[-1][0],]
             for i in range(self.cfg.num_rows):
                 difficulty = i / (self.cfg.num_rows-1)
                 terrain = self.make_terrain_goal(height, difficulty)
@@ -166,13 +151,14 @@ class Terrain:
         x2 = int((self.env_length/2. + 0.5) / terrain.horizontal_scale)
         y1 = int((self.env_width/2. - 0.5) / terrain.horizontal_scale)
         y2 = int((self.env_width/2. + 0.5) / terrain.horizontal_scale)
-        if self.cfg.origin_zero_z:
-            env_origin_z = 0
-        else:
-            env_origin_z = np.max(terrain.height_field_raw[x1:x2, y1:y2])*terrain.vertical_scale
+        # if self.cfg.origin_zero_z:
+        #     env_origin_z = 0
+        # else:
+        env_origin_z = np.max(terrain.height_field_raw[x1:x2, y1:y2])*terrain.vertical_scale
         self.env_origins[i, j] = [env_origin_x, env_origin_y, env_origin_z]
         # self.terrain_type[i, j] = terrain.idx
         self.goals[i, j] = terrain.goals + [i * self.env_length, j * self.env_width, 0]
+        # self.env_goals[i, j] = self.goals[i, j] - self.env_origins[i, j]
         # self.env_slope_vec[i, j] = terrain.slope_vector
 
     def make_terrain_goal(self, goal_vec, difficulty):
@@ -182,7 +168,7 @@ class Terrain:
                                 vertical_scale=self.cfg.vertical_scale,
                                 horizontal_scale=self.cfg.horizontal_scale)
         
-        if goal_vec[-1] != 0:
+        if np.abs(goal_vec[-1]) < 0.1:
             parkour_step_terrain(terrain, num_stones=1, step_height=goal_vec[-1])
             self.add_roughness(terrain)
         else:
@@ -200,7 +186,7 @@ class Terrain:
         return terrain
     
 def parkour_gap_terrain(terrain,
-                           platform_len=0.2, 
+                           platform_len=1.0, 
                            platform_height=0., 
                            gap_size=0.3,
                            x_range=[0.3, 0.6],
@@ -252,7 +238,7 @@ def parkour_gap_terrain(terrain,
     terrain.height_field_raw[-pad_width:, :] = pad_height
 
 def parkour_step_terrain(terrain,
-                        platform_len=1.5, 
+                        platform_len=2.0, 
                         platform_height=0., 
                         num_stones=1,
                         x_range=[0.2, 0.4],
@@ -295,7 +281,8 @@ def parkour_step_terrain(terrain,
         # terrain.height_field_raw[last_dis_x:dis_x, mid_y+rand_y+half_valid_width:] = 0
         
         last_dis_x = dis_x
-        goals[i] = [dis_x-rand_x//2, mid_y+rand_y, step_height]
+        # make sure the scale of the terrain is the same
+        goals[i] = [dis_x-rand_x//2, mid_y+rand_y, step_height * terrain.vertical_scale]
     terrain.height_field_raw[dis_x:, :] = stair_height
     final_dis_x = dis_x + np.random.randint(dis_x_min, dis_x_max)
     # import ipdb; ipdb.set_trace()

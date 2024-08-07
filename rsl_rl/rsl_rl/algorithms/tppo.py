@@ -7,7 +7,7 @@ import torch.optim as optim
 
 import rsl_rl.modules as modules
 from rsl_rl.storage.rollout_storage import ActionLabelRollout
-from rsl_rl.algorithms.ppo import PPO
+from rsl_rl.algorithms.ppo import PPOVel as PPO
 
 # assuming learning iteration is at an assumable iteration scale
 def GET_TEACHER_ACT_PROB_FUNC(option, iteration_scale):

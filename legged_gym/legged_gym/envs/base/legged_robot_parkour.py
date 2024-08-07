@@ -9,7 +9,8 @@ import torchvision.transforms as T
 from legged_gym.envs.base.legged_robot import LeggedRobot
 from legged_gym import LEGGED_GYM_ROOT_DIR
 from legged_gym.envs.base.base_task import BaseTask
-from legged_gym.utils.terrain.terrain import Terrain
+# from legged_gym.utils.terrain.terrain import Terrain
+from legged_gym.utils.terrain.terrain_extreme import Terrain
 from legged_gym.utils.math import quat_apply_yaw, wrap_to_pi, torch_rand_sqrt_float
 from legged_gym.utils.helpers import class_to_dict
 from .legged_robot_config import LeggedRobotCfg
@@ -28,6 +29,7 @@ done    compute_observations
         |
         |-  _get_proprioception_obs
         |-  _get_prop_history_obs
+        |-  _get_goal_obs
 
 done    _process_rigid_shape_props
 done    _process_dof_props
@@ -55,6 +57,7 @@ class LeggedRobotParkour(LeggedRobot):
 
     # ------------init--------------
     def __init__(self, cfg: LeggedRobotCfg, sim_params, physics_engine, sim_device, headless):
+        self.all_obs_components = cfg.env.obs_components
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
         self._prepare_termination_function()
 
@@ -233,23 +236,10 @@ class LeggedRobotParkour(LeggedRobot):
         self._resample_commands(env_ids)
         self._reset_buffers(env_ids)
         self._reset_goals(env_ids)
-
+    
     # ---------CallBacks-------------
     def _post_physics_step_callback(self):
         super()._post_physics_step_callback()
-
-        with torch.no_grad():
-            pos_x = self.root_states[:, 0] - self.env_origins[:, 0]
-            pos_y = self.root_states[:, 1] - self.env_origins[:, 1]
-            self.extras["episode"]["max_pos_x"] = max(self.extras["episode"]["max_pos_x"], torch.max(pos_x).cpu())
-            self.extras["episode"]["min_pos_x"] = min(self.extras["episode"]["min_pos_x"], torch.min(pos_x).cpu())
-            self.extras["episode"]["max_pos_y"] = max(self.extras["episode"]["max_pos_y"], torch.max(pos_y).cpu())
-            self.extras["episode"]["min_pos_y"] = min(self.extras["episode"]["min_pos_y"], torch.min(pos_y).cpu())
-            if self.check_BarrierTrack_terrain():
-                self.extras["episode"]["n_obstacle_passed"] = torch.mean(torch.clip(
-                    torch.div(pos_x, self.terrain.env_block_length, rounding_mode= "floor") - 1,
-                    min= 0.0,
-                )).cpu()
 
         self.max_power_per_timestep = torch.maximum(
             self.max_power_per_timestep,
@@ -288,6 +278,7 @@ class LeggedRobotParkour(LeggedRobot):
                 )
         
         super()._init_buffers()
+        self._init_goals()
 
         # additional gym GPU state tensors
         force_sensor_tensor = self.gym.acquire_force_sensor_tensor(self.sim)
@@ -297,7 +288,7 @@ class LeggedRobotParkour(LeggedRobot):
 
         # additional wrapper tensors
         self.rigid_body_states = gymtorch.wrap_tensor(rigid_body_state_tensor).view(self.num_envs, -1, 13)
-        self.force_sensor_tensor = gymtorch.wrap_tensor(force_sensor_tensor).view(self.num_envs, 4, 6) # for feet only, see create_env()
+        # self.force_sensor_tensor = gymtorch.wrap_tensor(force_sensor_tensor).view(self.num_envs, 4, 6) # for feet only, see create_env()
 
         # additional data initializations
         self.reach_goal_timer = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
@@ -340,75 +331,75 @@ class LeggedRobotParkour(LeggedRobot):
         all_obs_components = self.all_obs_components
 
         # init action delay buffer
-        if getattr(self.cfg.control, "action_delay", False):
-            assert hasattr(self.cfg.control, "action_delay_range") and hasattr(self.cfg.control, "action_delay_resample_time"), "Please specify action_delay_range and action_delay_resample_time in the config file."
-            """ Used in pre-physics step """
-            self.cfg.control.action_history_buffer_length = int((self.cfg.control.action_delay_range[1] + self.dt) / self.dt)
-            self.actions_history_buffer = torch.zeros(
-                (
-                    self.cfg.control.action_history_buffer_length,
-                    self.num_envs,
-                    self.num_actions,
-                ),
-                dtype= torch.float32,
-                device= self.device,
-            )
-            self.current_action_delay = torch_rand_float(
-                self.cfg.control.action_delay_range[0],
-                self.cfg.control.action_delay_range[1],
-                (self.num_envs, 1),
-                device= self.device,
-            ).flatten()
-            self.action_delayed_frames = ((self.current_action_delay / self.dt) + 1).to(int)
+        # if getattr(self.cfg.control, "action_delay", False):
+        #     assert hasattr(self.cfg.control, "action_delay_range") and hasattr(self.cfg.control, "action_delay_resample_time"), "Please specify action_delay_range and action_delay_resample_time in the config file."
+        #     """ Used in pre-physics step """
+        #     self.cfg.control.action_history_buffer_length = int((self.cfg.control.action_delay_range[1] + self.dt) / self.dt)
+        #     self.actions_history_buffer = torch.zeros(
+        #         (
+        #             self.cfg.control.action_history_buffer_length,
+        #             self.num_envs,
+        #             self.num_actions,
+        #         ),
+        #         dtype= torch.float32,
+        #         device= self.device,
+        #     )
+        #     self.current_action_delay = torch_rand_float(
+        #         self.cfg.control.action_delay_range[0],
+        #         self.cfg.control.action_delay_range[1],
+        #         (self.num_envs, 1),
+        #         device= self.device,
+        #     ).flatten()
+        #     self.action_delayed_frames = ((self.current_action_delay / self.dt) + 1).to(int)
 
-        # init proprioception delay buffer
-        if "proprioception" in all_obs_components and hasattr(self.cfg.sensor, "proprioception"):
-            """ Adding proprioception delay buffer """
-            self.cfg.sensor.proprioception.buffer_length = int((self.cfg.sensor.proprioception.latency_range[1] + self.dt) / self.dt)
-            self.proprioception_buffer = torch.zeros(
-                (
-                    self.cfg.sensor.proprioception.buffer_length,
-                    self.num_envs,
-                    self.get_num_obs_from_components(["proprioception"]),
-                ),
-                dtype= torch.float32,
-                device= self.device,
-            )
-            self.current_proprioception_latency = torch_rand_float(
-                self.cfg.sensor.proprioception.latency_range[0],
-                self.cfg.sensor.proprioception.latency_range[1],
-                (self.num_envs, 1),
-                device= self.device,
-            ).flatten()
-            self.proprioception_delayed_frames = ((self.current_proprioception_latency / self.dt) + 1).to(int)
+        # # init proprioception delay buffer
+        # if "proprioception" in all_obs_components and hasattr(self.cfg.sensor, "proprioception"):
+        #     """ Adding proprioception delay buffer """
+        #     self.cfg.sensor.proprioception.buffer_length = int((self.cfg.sensor.proprioception.latency_range[1] + self.dt) / self.dt)
+        #     self.proprioception_buffer = torch.zeros(
+        #         (
+        #             self.cfg.sensor.proprioception.buffer_length,
+        #             self.num_envs,
+        #             self.get_num_obs_from_components(["proprioception"]),
+        #         ),
+        #         dtype= torch.float32,
+        #         device= self.device,
+        #     )
+        #     self.current_proprioception_latency = torch_rand_float(
+        #         self.cfg.sensor.proprioception.latency_range[0],
+        #         self.cfg.sensor.proprioception.latency_range[1],
+        #         (self.num_envs, 1),
+        #         device= self.device,
+        #     ).flatten()
+        #     self.proprioception_delayed_frames = ((self.current_proprioception_latency / self.dt) + 1).to(int)
 
-        # init depth sensor and delay
-        if "forward_depth" in all_obs_components and hasattr(self.cfg.sensor, "forward_camera"):
-            output_resolution = getattr(self.cfg.sensor.forward_camera, "output_resolution", self.cfg.sensor.forward_camera.resolution)
-            self.cfg.sensor.forward_camera.buffer_length = int((self.cfg.sensor.forward_camera.latency_range[1] + self.cfg.sensor.forward_camera.refresh_duration) / self.dt)
-            self.forward_depth_buffer = torch.zeros(
-                (
-                    self.cfg.sensor.forward_camera.buffer_length,
-                    self.num_envs, 
-                    1,
-                    output_resolution[0],
-                    output_resolution[1],
-                ),
-                dtype= torch.float32,
-                device= self.device,
-            )
-            self.forward_depth_delayed_frames = torch.ones((self.num_envs,), device= self.device, dtype= int) * self.cfg.sensor.forward_camera.buffer_length
-            self.current_forward_camera_latency = torch_rand_float(
-                self.cfg.sensor.forward_camera.latency_range[0],
-                self.cfg.sensor.forward_camera.latency_range[1],
-                (self.num_envs, 1),
-                device= self.device,
-            ).flatten()
-            if hasattr(self.cfg.sensor.forward_camera, "resized_resolution"):
-                self.forward_depth_resize_transform = T.Resize(
-                    self.cfg.sensor.forward_camera.resized_resolution,
-                    interpolation= T.InterpolationMode.BICUBIC,
-                )
+        # # init depth sensor and delay
+        # if "forward_depth" in all_obs_components and hasattr(self.cfg.sensor, "forward_camera"):
+        #     output_resolution = getattr(self.cfg.sensor.forward_camera, "output_resolution", self.cfg.sensor.forward_camera.resolution)
+        #     self.cfg.sensor.forward_camera.buffer_length = int((self.cfg.sensor.forward_camera.latency_range[1] + self.cfg.sensor.forward_camera.refresh_duration) / self.dt)
+        #     self.forward_depth_buffer = torch.zeros(
+        #         (
+        #             self.cfg.sensor.forward_camera.buffer_length,
+        #             self.num_envs, 
+        #             1,
+        #             output_resolution[0],
+        #             output_resolution[1],
+        #         ),
+        #         dtype= torch.float32,
+        #         device= self.device,
+        #     )
+        #     self.forward_depth_delayed_frames = torch.ones((self.num_envs,), device= self.device, dtype= int) * self.cfg.sensor.forward_camera.buffer_length
+        #     self.current_forward_camera_latency = torch_rand_float(
+        #         self.cfg.sensor.forward_camera.latency_range[0],
+        #         self.cfg.sensor.forward_camera.latency_range[1],
+        #         (self.num_envs, 1),
+        #         device= self.device,
+        #     ).flatten()
+        #     if hasattr(self.cfg.sensor.forward_camera, "resized_resolution"):
+        #         self.forward_depth_resize_transform = T.Resize(
+        #             self.cfg.sensor.forward_camera.resized_resolution,
+        #             interpolation= T.InterpolationMode.BICUBIC,
+        #         )
         
         self.contour_detection_kernel = torch.zeros(
             (8, 1, 3, 3),
@@ -481,31 +472,36 @@ class LeggedRobotParkour(LeggedRobot):
         
         return return_
     
+    def _create_terrain(self):
+        mesh_type = self.cfg.terrain.mesh_type
+        self.terrain = Terrain(self.cfg.terrain, self.num_envs)
+        if mesh_type=='plane':
+            self._create_ground_plane()
+        elif mesh_type=='heightfield':
+            self._create_heightfield()
+        elif mesh_type=='trimesh':
+            self._create_trimesh()
+        elif mesh_type is not None:
+            raise ValueError("Terrain mesh type not recognised. Allowed types are [None, plane, heightfield, trimesh]")
+
     def _update_goals(self):
         next_flag = self.reach_goal_timer > self.cfg.env.reach_goal_delay / self.dt
-        self.cur_goal_idx[next_flag] += 1
         self.reach_goal_timer[next_flag] = 0
 
-        self.reached_goal_ids = torch.norm(self.root_states[:, :2] - self.cur_goals[:, :2], dim=1) < self.cfg.env.next_goal_threshold
+        self.reached_goal_ids = torch.norm(self.root_states[:, :2] - self.env_goals[:, :2], dim=1) < self.cfg.env.next_goal_threshold
         self.reach_goal_timer[self.reached_goal_ids] += 1
 
-        self.target_pos_rel = self.cur_goals[:, :2] - self.root_states[:, :2]
-        self.next_target_pos_rel = self.next_goals[:, :2] - self.root_states[:, :2]
+        self.target_pos_rel = self.env_goals[:, :2] - self.root_states[:, :2]
 
         norm = torch.norm(self.target_pos_rel, dim=-1, keepdim=True)
         target_vec_norm = self.target_pos_rel / (norm + 1e-5)
         self.target_yaw = torch.atan2(target_vec_norm[:, 1], target_vec_norm[:, 0])
-
-        norm = torch.norm(self.next_target_pos_rel, dim=-1, keepdim=True)
-        target_vec_norm = self.next_target_pos_rel / (norm + 1e-5)
-        self.next_target_yaw = torch.atan2(target_vec_norm[:, 1], target_vec_norm[:, 0])
     
     def _reset_buffers(self, env_ids):
         super()._reset_buffers(env_ids)
 
         # additional buffer reset
         self.last_root_vel[env_ids] = 0.
-        self.cur_goal_idx[env_ids] = 0.
         self.reach_goal_timer[env_ids] = 0.
         self.init_base_vel[env_ids] = self.root_states[env_ids, 7:13]
 
@@ -540,12 +536,12 @@ class LeggedRobotParkour(LeggedRobot):
         segment_start_idx = 0
         obs_segments = self.get_obs_segment_from_components(cfg.env.obs_components)
         # write noise for each corresponding component.
-        for k, v in obs_segments.items():
-            segment_length = np.prod(v)
-            # write sensor scale to provided noise_vec
-            # for example "_write_forward_depth_noise"
-            getattr(self, "_write_" + k + "_noise")(noise_vec[segment_start_idx: segment_start_idx + segment_length])
-            segment_start_idx += segment_length
+        # for k, v in obs_segments.items():
+        #     segment_length = np.prod(v)
+        #     # write sensor scale to provided noise_vec
+        #     # for example "_write_forward_depth_noise"
+        #     getattr(self, "_write_" + k + "_noise")(noise_vec[segment_start_idx: segment_start_idx + segment_length])
+        #     segment_start_idx += segment_length
 
         return noise_vec
 
@@ -574,19 +570,22 @@ class LeggedRobotParkour(LeggedRobot):
             return torques
     
     # ---------- Setting Goals ---------
-    # TODO: place holders for init all the goals, can be put in
-    # terrain composition
     def _init_goals(self):
-        pass
+        self.terrain_goals = torch.from_numpy(self.terrain.goals[:, :, 0]).to(self.device).to(torch.float)
+        self.env_goals = self.terrain_goals[self.terrain_levels, self.terrain_types] - self.root_states[:, :3]
+        self.init_velocities = self.root_states[:, 7:10]
+        self.goal_velocities = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range, self.env_goals.shape, device=self.device)
 
     def _reset_goals(self, env_ids):
-        pass
+        self.env_goals[env_ids] = self.terrain_goals[self.terrain_levels[env_ids], self.terrain_types[env_ids]] - self.root_states[env_ids, :3]
+        self.init_velocities[env_ids] = self.root_states[env_ids, 7:10]
+        self.goal_velocities[env_ids] = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range, self.env_goals[env_ids].shape, device=self.device)
 
     # ----Process robot physical properties----
     def _process_rigid_shape_props(self, props, env_id):
         props = super()._process_rigid_shape_props(props, env_id)
         if env_id == 0:
-            all_obs_components = self.all_obs_components
+            all_obs_components = self.cfg.env.obs_components
             if "robot_config" in all_obs_components:
                 all_obs_components
                 self.robot_config_buffer = torch.empty(
@@ -645,8 +644,8 @@ class LeggedRobotParkour(LeggedRobot):
                 self.gym.start_access_image_tensors(self.sim)
                 break
         add_noise = self.add_noise; self.add_noise = False
-        super().compute_observations()
-        self.obs_super_impl = self.obs_buf
+        # super().compute_observations()
+        # self.obs_super_impl = self.obs_buf
         self.add_noise = add_noise
 
     def _get_obs_from_components(self, components: list, privileged= False):
@@ -676,10 +675,10 @@ class LeggedRobotParkour(LeggedRobot):
                             self.delta_yaw[:, None],            # 1
                             self.delta_next_yaw[:, None],       # 1  
                             # self.commands[:, 0:1],  #[1,1]
-                            (self.dof_pos) * self.obs_scales.dof_pos,   #  3
-                            self.dof_vel * self.obs_scales.dof_vel,
-                            self.last_actions,
-                            self.contact_filt.float()-0.5,
+                            (self.dof_pos) * self.obs_scales.dof_pos,   #  12
+                            self.dof_vel * self.obs_scales.dof_vel,     #  12
+                            self.last_actions,                          #  12
+                            self.contact_filt.float()-0.5,              #  4
                             ),dim=-1)
         self.obs_history_buf = torch.where(
             (self.episode_length_buf <= 1)[:, None, None], 
@@ -714,23 +713,11 @@ class LeggedRobotParkour(LeggedRobot):
     def _get_robot_config_obs(self, privileged= False):
         return self.robot_config_buffer
 
-    def _get_engaging_block_obs(self, privileged= False):
-        """ Compute the obstacle info for the robot """
-        if not self.check_BarrierTrack_terrain():
-            # This could be wrong, check BarrierTrack implementation to get the exact shape.
-            return torch.zeros((self.num_envs, (1 + (4 + 1) + 2)), device= self.sim_device)
-        base_positions = self.root_states[:, 0:3] # (n_envs, 3)
-        self.refresh_volume_sample_points()
-        return self.terrain.get_engaging_block_info(
-            base_positions,
-            self.volume_sample_points - base_positions.unsqueeze(-2), # (n_envs, n_points, 3)
-        )
-
-    def _get_sidewall_distance_obs(self, privileged= False):
-        if not self.check_BarrierTrack_terrain():
-            return torch.zeros((self.num_envs, 2), device= self.sim_device)
-        base_positions = self.root_states[:, 0:3] # (n_envs, 3)
-        return self.terrain.get_sidewall_distance(base_positions)
+    def _get_goal_obs(self):
+        goal_obs_buf = torch.cat([self.env_goals, 
+                                  self.init_velocities * self.obs_scales.lin_vel,
+                                  self.goal_velocities * self.obs_scales.lin_vel], dim=-1)
+        return goal_obs_buf
 
     # -------------Termination----------------
     def _prepare_termination_function(self):
@@ -754,6 +741,50 @@ class LeggedRobotParkour(LeggedRobot):
             height_high_cutoff = z > self.cfg.termination.termination_threshold['height'][1]
             self.reset_buf |= height_low_cutoff
             self.reset_buf |= height_high_cutoff
+        else:
+            height_cutoff = self.root_states[:, 2] < self.cfg.termination.termination_threshold['height']
+            self.reset_buf |= height_cutoff
+
+    def _termination_goal(self):
+        reach_goal_cutoff = self.reached_goal_ids
+        self.reset_buf |= reach_goal_cutoff
+
+    # ----------Rewards-----------------
+    def _reward_tracking_goal_vel(self):
+        norm = torch.norm(self.target_pos_rel, dim=-1, keepdim=True)
+        target_vec_norm = self.target_pos_rel / (norm + 1e-5)
+        cur_vel = self.root_states[:, 7:9]
+        rew = torch.sum(target_vec_norm * cur_vel, dim=-1)
+        return rew
+
+    def _reward_tracking_yaw(self):
+        rew = torch.exp(-torch.abs(self.target_yaw - self.yaw))
+        return rew
+    
+    def _reward_delta_torques(self):
+        return torch.sum(torch.square(self.torques - self.last_torques), dim=1)
+    
+    def _reward_hip_pos(self):
+        return torch.sum(torch.square(self.dof_pos[:, self.hip_indices] - self.default_dof_pos[:, self.hip_indices]), dim=1)
+
+    def _reward_feet_stumble(self):
+        # Penalize feet hitting vertical surfaces
+        rew = torch.any(torch.norm(self.contact_forces[:, self.feet_indices, :2], dim=2) >\
+             4 *torch.abs(self.contact_forces[:, self.feet_indices, 2]), dim=1)
+        return rew.float()
+
+    def _reward_feet_edge(self):
+        feet_pos_xy = ((self.rigid_body_states[:, self.feet_indices, :2] + self.terrain.cfg.border_size) / self.cfg.terrain.horizontal_scale).round().long()  # (num_envs, 4, 2)
+        feet_pos_xy[..., 0] = torch.clip(feet_pos_xy[..., 0], 0, self.x_edge_mask.shape[0]-1)
+        feet_pos_xy[..., 1] = torch.clip(feet_pos_xy[..., 1], 0, self.x_edge_mask.shape[1]-1)
+        feet_at_edge = self.x_edge_mask[feet_pos_xy[..., 0], feet_pos_xy[..., 1]]
+    
+        self.feet_at_edge = self.contact_filt & feet_at_edge
+        rew = (self.terrain_levels > 3) * torch.sum(self.feet_at_edge, dim=-1)
+        return rew
+
+    def _reward_lin_pos_x(self):
+        return torch.abs((self.root_states[:, :3] - self.env_origins)[:, 1])
     
     # -----------Debug-------------------
     def _draw_debug_vis(self):

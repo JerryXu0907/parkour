@@ -42,7 +42,7 @@ import rsl_rl.modules as modules
 from rsl_rl.env import VecEnv
 
 
-class OnPolicyRunner:
+class OnPolicyRunnerVel:
 
     def __init__(self,
                  env: VecEnv,

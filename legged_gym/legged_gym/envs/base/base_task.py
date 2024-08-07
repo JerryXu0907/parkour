@@ -139,7 +139,12 @@ class BaseTask():
 
     def step(self, actions):
         raise NotImplementedError
-
+    
+    def lookat(self, i):
+        look_at_pos = self.root_states[i, :3].clone()
+        cam_pos = look_at_pos + self.lookat_vec
+        self.set_camera(cam_pos, look_at_pos)
+        
     def render(self, sync_frame_time=True):
         if self.viewer:
             # check for window closed

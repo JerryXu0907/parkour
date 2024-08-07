@@ -35,11 +35,11 @@ import torch.optim as optim
 import numpy as np
 import copy
 
-from rsl_rl.modules import ActorCritic
+from rsl_rl.modules import ActorCritic, ActorCriticRMA
 from rsl_rl.storage import RolloutStorage
 
-class PPO:
-    actor_critic: ActorCritic
+class PPOVel:
+    # actor_critic: ActorCritic | ActorCriticRMA
     def __init__(self,
                  actor_critic,
                  velocity_planner,

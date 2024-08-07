@@ -719,6 +719,7 @@ class LeggedRobot(BaseTask):
         tm_params.restitution = self.cfg.terrain.restitution
         self.gym.add_triangle_mesh(self.sim, self.terrain.vertices.flatten(order='C'), self.terrain.triangles.flatten(order='C'), tm_params)   
         self.height_samples = torch.tensor(self.terrain.heightsamples).view(self.terrain.tot_rows, self.terrain.tot_cols).to(self.device)
+        self.x_edge_mask = torch.tensor(self.terrain.x_edge_mask).view(self.terrain.tot_rows, self.terrain.tot_cols).to(self.device)
 
     def _create_sensors(self, env_handle= None, actor_handle= None):
         """ attach necessary sensors for each actor in each env
@@ -777,6 +778,12 @@ class LeggedRobot(BaseTask):
         self.num_bodies = len(body_names)
         self.num_dofs = len(self.dof_names)
         feet_names = [s for s in body_names if self.cfg.asset.foot_name in s]
+
+        for s in ["FR_foot", "FL_foot", "RR_foot", "RL_foot"]:
+            feet_idx = self.gym.find_asset_rigid_body_index(robot_asset, s)
+            sensor_pose = gymapi.Transform(gymapi.Vec3(0.0, 0.0, 0.0))
+            self.gym.create_asset_force_sensor(robot_asset, feet_idx, sensor_pose)
+
         penalized_contact_names = []
         for name in self.cfg.asset.penalize_contacts_on:
             penalized_contact_names.extend([s for s in body_names if name in s])
@@ -851,7 +858,7 @@ class LeggedRobot(BaseTask):
             self.custom_origins = True
             self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
             # put robots at the origins defined by the terrain
-            max_init_level = self.cfg.terrain.max_init_terrain_level
+            max_init_level = 1 #self.cfg.terrain.max_init_terrain_level
             if not self.cfg.terrain.curriculum: max_init_level = self.cfg.terrain.num_rows - 1
             self.terrain_levels = torch.randint(0, max_init_level+1, (self.num_envs,), device=self.device)
             self.terrain_types = torch.div(torch.arange(self.num_envs, device=self.device), (self.num_envs/self.cfg.terrain.num_cols), rounding_mode='floor').to(torch.long)
@@ -1014,6 +1021,10 @@ class LeggedRobot(BaseTask):
         # Penalize changes in actions
         return torch.sum(torch.square(self.last_actions - self.actions), dim=1)
     
+    def _reward_dof_error(self):
+        dof_error = torch.sum(torch.square(self.dof_pos - self.default_dof_pos), dim=1)
+        return dof_error
+
     def _reward_collision(self):
         # Penalize collisions on selected bodies
         return torch.sum(1.*(torch.norm(self.contact_forces[:, self.penalised_contact_indices, :], dim=-1) > 0.1), dim=1)

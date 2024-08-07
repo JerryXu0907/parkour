@@ -33,6 +33,7 @@ from legged_gym.envs.a1.a1_config import A1RoughCfg, A1RoughCfgPPO, A1PlaneCfg, 
 from .base.legged_robot import LeggedRobot
 from .base.legged_robot_field import LeggedRobotField
 from .base.legged_robot_noisy import LeggedRobotNoisy
+from .base.legged_robot_parkour import LeggedRobotParkour
 from .anymal_c.anymal import Anymal
 from .anymal_c.mixed_terrains.anymal_c_rough_config import AnymalCRoughCfg, AnymalCRoughCfgPPO
 from .anymal_c.flat.anymal_c_flat_config import AnymalCFlatCfg, AnymalCFlatCfgPPO
@@ -43,6 +44,7 @@ from .a1.a1_config import A1RoughCfg, A1RoughCfgPPO
 from .a1.a1_field_config import A1FieldCfg, A1FieldCfgPPO
 from .a1.a1_field_distill_config import A1FieldDistillCfg, A1FieldDistillCfgPPO
 from .go1.go1_field_config import Go1FieldCfg, Go1FieldCfgPPO
+from .go1.go1_parkour_config import Go1ParkourCfg, Go1ParkourCfgPPO
 from .go1.go1_field_distill_config import Go1FieldDistillCfg, Go1FieldDistillCfgPPO
 
 
@@ -60,6 +62,7 @@ task_registry.register( "a1_distill", LeggedRobotNoisy, A1FieldDistillCfg(), A1F
 task_registry.register( "cassie", Cassie, CassieRoughCfg(), CassieRoughCfgPPO() )
 task_registry.register( "go1_field", LeggedRobotNoisy, Go1FieldCfg(), Go1FieldCfgPPO())
 task_registry.register( "go1_distill", LeggedRobotNoisy, Go1FieldDistillCfg(), Go1FieldDistillCfgPPO())
+task_registry.register( "go1_parkour", LeggedRobotParkour, Go1ParkourCfg(), Go1ParkourCfgPPO())
 
 ## The following tasks are for the convinience of opensource
 from .a1.a1_remote_config import A1RemoteCfg, A1RemoteCfgPPO

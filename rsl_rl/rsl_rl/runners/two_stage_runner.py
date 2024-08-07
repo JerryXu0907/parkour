@@ -2,7 +2,7 @@ import os
 
 import torch
 
-from rsl_rl.runners.on_policy_runner import OnPolicyRunner
+from rsl_rl.runners.on_policy_runner import OnPolicyRunnerVel as OnPolicyRunner
 from rsl_rl.storage.rollout_dataset import RolloutDataset
 
 class TwoStageRunner(OnPolicyRunner):
