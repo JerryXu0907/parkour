@@ -439,10 +439,14 @@ class LeggedRobot(BaseTask):
             base_quat = quat_from_euler_xyz(base_roll, base_pitch, torch.zeros_like(base_roll))
             self.root_states[env_ids, 3:7] = base_quat
         # base velocities
+
         if getattr(self.cfg.domain_rand, "init_base_vel_range", None) is None:
             base_vel_range = (-0.5, 0.5)
         else:
             base_vel_range = self.cfg.domain_rand.init_base_vel_range
+
+        # debug use for training
+        base_vel_range = (0, 0)
         if isinstance(base_vel_range, (tuple, list)):
             self.root_states[env_ids, 7:13] = torch_rand_float(
                 *base_vel_range,

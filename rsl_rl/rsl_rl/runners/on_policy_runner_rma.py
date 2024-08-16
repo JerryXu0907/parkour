@@ -67,9 +67,10 @@ class OnPolicyRunner:
         print("Using MLP and Priviliged Env encoder ActorCritic structure")
         actor_critic: ActorCriticRMA = ActorCriticRMA(self.env.cfg.env.n_proprio,
                                                       self.env.cfg.env.n_scan,
-                                                      self.env.num_obs,
+                                                      self.env.cfg.env.num_observations,
                                                       self.env.cfg.env.n_priv_latent,
-                                                      self.env.cfg.env.n_priv,
+                                                      self.env.cfg.env.n_priv_explicit,
+                                                      self.env.cfg.env.n_goal,
                                                       self.env.cfg.env.history_len,
                                                       self.env.num_actions,
                                                       **self.policy_cfg).to(self.device)
@@ -143,12 +144,8 @@ class OnPolicyRunner:
 
         ep_infos = []
         rewbuffer = deque(maxlen=100)
-        rew_explr_buffer = deque(maxlen=100)
-        rew_entropy_buffer = deque(maxlen=100)
         lenbuffer = deque(maxlen=100)
         cur_reward_sum = torch.zeros(self.env.num_envs, dtype=torch.float, device=self.device)
-        cur_reward_explr_sum = torch.zeros(self.env.num_envs, dtype=torch.float, device=self.device)
-        cur_reward_entropy_sum = torch.zeros(self.env.num_envs, dtype=torch.float, device=self.device)
         cur_episode_length = torch.zeros(self.env.num_envs, dtype=torch.float, device=self.device)
 
         tot_iter = self.current_learning_iteration + num_learning_iterations
@@ -172,20 +169,14 @@ class OnPolicyRunner:
                         if 'episode' in infos:
                             ep_infos.append(infos['episode'])
                         cur_reward_sum += total_rew
-                        cur_reward_explr_sum += 0
-                        cur_reward_entropy_sum += 0
                         cur_episode_length += 1
                         
                         new_ids = (dones > 0).nonzero(as_tuple=False)
                         
                         rewbuffer.extend(cur_reward_sum[new_ids][:, 0].cpu().numpy().tolist())
-                        rew_explr_buffer.extend(cur_reward_explr_sum[new_ids][:, 0].cpu().numpy().tolist())
-                        rew_entropy_buffer.extend(cur_reward_entropy_sum[new_ids][:, 0].cpu().numpy().tolist())
                         lenbuffer.extend(cur_episode_length[new_ids][:, 0].cpu().numpy().tolist())
                         
                         cur_reward_sum[new_ids] = 0
-                        cur_reward_explr_sum[new_ids] = 0
-                        cur_reward_entropy_sum[new_ids] = 0
                         cur_episode_length[new_ids] = 0
 
                 stop = time.time()
@@ -429,9 +420,6 @@ class OnPolicyRunner:
         wandb_dict['Perf/learning_time'] = locs['learn_time']
         if len(locs['rewbuffer']) > 0:
             wandb_dict['Train/mean_reward'] = statistics.mean(locs['rewbuffer'])
-            wandb_dict['Train/mean_reward_explr'] = statistics.mean(locs['rew_explr_buffer'])
-            wandb_dict['Train/mean_reward_task'] = wandb_dict['Train/mean_reward'] - wandb_dict['Train/mean_reward_explr']
-            wandb_dict['Train/mean_reward_entropy'] = statistics.mean(locs['rew_entropy_buffer'])
             wandb_dict['Train/mean_episode_length'] = statistics.mean(locs['lenbuffer'])
             # wandb_dict['Train/mean_reward/time', statistics.mean(locs['rewbuffer']), self.tot_time)
             # wandb_dict['Train/mean_episode_length/time', statistics.mean(locs['lenbuffer']), self.tot_time)
@@ -451,9 +439,6 @@ class OnPolicyRunner:
                           f"""{'Discriminator accuracy:':>{pad}} {locs['mean_disc_acc']:.4f}\n"""
                           f"""{'Mean action noise std:':>{pad}} {mean_std.item():.2f}\n"""
                           f"""{'Mean reward (total):':>{pad}} {statistics.mean(locs['rewbuffer']):.2f}\n"""
-                          f"""{'Mean reward (task):':>{pad}} {statistics.mean(locs['rewbuffer']) - statistics.mean(locs['rew_explr_buffer']):.2f}\n"""
-                          f"""{'Mean reward (exploration):':>{pad}} {statistics.mean(locs['rew_explr_buffer']):.2f}\n"""
-                          f"""{'Mean reward (entropy):':>{pad}} {statistics.mean(locs['rew_entropy_buffer']):.2f}\n"""
                           f"""{'Mean episode length:':>{pad}} {statistics.mean(locs['lenbuffer']):.2f}\n""")
                         #   f"""{'Mean reward/step:':>{pad}} {locs['mean_reward']:.2f}\n"""
                         #   f"""{'Mean episode length/episode:':>{pad}} {locs['mean_trajectory_length']:.2f}\n""")

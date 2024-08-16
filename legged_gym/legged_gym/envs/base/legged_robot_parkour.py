@@ -185,9 +185,9 @@ class LeggedRobotParkour(LeggedRobot):
         """
         segments = OrderedDict()
         if "proprioception" in components:
-            segments["proprioception"] = (48,)
+            segments["proprioception"] = (46,)
         if "height_measurements" in components:
-            segments["height_measurements"] = (187,)
+            segments["height_measurements"] = (132,)
         if "forward_depth" in components:
             segments["forward_depth"] = (1, *self.cfg.sensor.forward_camera.resolution)
         if "base_pose" in components:
@@ -199,6 +199,10 @@ class LeggedRobotParkour(LeggedRobot):
             # base mass (payload)
             # motor strength for each joint
             segments["robot_config"] = (1 + 3 + 1 + 12,)
+        if "goal" in components:
+            segments['goal'] = (3+3+3,)
+        if "prop_history" in components:
+            segments["prop_history"] = (10 * 46,)
         return segments
     
     def get_num_obs_from_components(self, components):
@@ -276,7 +280,7 @@ class LeggedRobotParkour(LeggedRobot):
                     k,
                     torch.tensor(getattr(self.obs_scales, k, 1.), dtype= torch.float32, device= self.device)
                 )
-        
+        self.obs_history_buf = torch.zeros(self.num_envs, self.cfg.env.history_len, self.cfg.env.n_proprio, dtype= torch.float32, device=self.device)
         super()._init_buffers()
         self._init_goals()
 
@@ -488,10 +492,10 @@ class LeggedRobotParkour(LeggedRobot):
         next_flag = self.reach_goal_timer > self.cfg.env.reach_goal_delay / self.dt
         self.reach_goal_timer[next_flag] = 0
 
-        self.reached_goal_ids = torch.norm(self.root_states[:, :2] - self.env_goals[:, :2], dim=1) < self.cfg.env.next_goal_threshold
+        self.reached_goal_ids = torch.norm(self.root_states[:, :3] - self.env_goals, dim=1) < self.cfg.env.next_goal_threshold
         self.reach_goal_timer[self.reached_goal_ids] += 1
 
-        self.target_pos_rel = self.env_goals[:, :2] - self.root_states[:, :2]
+        self.target_pos_rel = self.env_goals - self.root_states[:, :3]
 
         norm = torch.norm(self.target_pos_rel, dim=-1, keepdim=True)
         target_vec_norm = self.target_pos_rel / (norm + 1e-5)
@@ -504,6 +508,7 @@ class LeggedRobotParkour(LeggedRobot):
         self.last_root_vel[env_ids] = 0.
         self.reach_goal_timer[env_ids] = 0.
         self.init_base_vel[env_ids] = self.root_states[env_ids, 7:13]
+        self.obs_history_buf[env_ids] = 0.
 
         if hasattr(self, "actions_history_buffer"):
             self.actions_history_buffer[:, env_ids] = 0.
@@ -646,6 +651,10 @@ class LeggedRobotParkour(LeggedRobot):
         add_noise = self.add_noise; self.add_noise = False
         # super().compute_observations()
         # self.obs_super_impl = self.obs_buf
+        self.obs_buf = self._get_obs_from_components(
+            self.cfg.env.obs_components,
+            privileged= False,
+        )
         self.add_noise = add_noise
 
     def _get_obs_from_components(self, components: list, privileged= False):
@@ -668,12 +677,10 @@ class LeggedRobotParkour(LeggedRobot):
     
     def _get_proprioception_obs(self, privileged= False):
         imu_obs = torch.stack((self.roll, self.pitch), dim=1)
-        self.delta_yaw = self.target_yaw - self.yaw
-        self.delta_next_yaw = self.next_target_yaw - self.yaw        
+        self.delta_yaw = self.target_yaw - self.yaw     
         obs_buf = torch.cat((self.base_ang_vel  * self.obs_scales.ang_vel,   # 3
                             imu_obs,    # 2
-                            self.delta_yaw[:, None],            # 1
-                            self.delta_next_yaw[:, None],       # 1  
+                            self.delta_yaw[:, None],            # 1       
                             # self.commands[:, 0:1],  #[1,1]
                             (self.dof_pos) * self.obs_scales.dof_pos,   #  12
                             self.dof_vel * self.obs_scales.dof_vel,     #  12
@@ -691,7 +698,7 @@ class LeggedRobotParkour(LeggedRobot):
         return obs_buf
     
     def _get_prop_history_obs(self, privileged=False):
-        return self.obs_history_buf
+        return self.obs_history_buf.reshape(self.num_envs, -1)
     
     def _get_height_measurements_obs(self, privileged= False):
         heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.3 - self.measured_heights, -1, 1.)
@@ -713,7 +720,7 @@ class LeggedRobotParkour(LeggedRobot):
     def _get_robot_config_obs(self, privileged= False):
         return self.robot_config_buffer
 
-    def _get_goal_obs(self):
+    def _get_goal_obs(self, privileged=False):
         goal_obs_buf = torch.cat([self.env_goals, 
                                   self.init_velocities * self.obs_scales.lin_vel,
                                   self.goal_velocities * self.obs_scales.lin_vel], dim=-1)
@@ -753,7 +760,7 @@ class LeggedRobotParkour(LeggedRobot):
     def _reward_tracking_goal_vel(self):
         norm = torch.norm(self.target_pos_rel, dim=-1, keepdim=True)
         target_vec_norm = self.target_pos_rel / (norm + 1e-5)
-        cur_vel = self.root_states[:, 7:9]
+        cur_vel = self.root_states[:, 7:10]
         rew = torch.sum(target_vec_norm * cur_vel, dim=-1)
         return rew
 

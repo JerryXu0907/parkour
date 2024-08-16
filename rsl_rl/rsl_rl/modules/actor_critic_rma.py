@@ -36,7 +36,6 @@ import torch.nn as nn
 from torch.distributions import Normal
 from torch.nn.modules import rnn
 from torch.nn.modules.activation import ReLU
-from .actor_critic import ActorCritic
 
 
 class StateHistoryEncoder(nn.Module):
@@ -93,8 +92,10 @@ class Actor(nn.Module):
                  scan_encoder_dims,
                  actor_hidden_dims, 
                  priv_encoder_dims, 
+                 goal_hidden_dims,
                  num_priv_latent, 
-                 num_priv_explicit, 
+                 num_priv_explicit,
+                 num_goals, 
                  num_hist, activation, 
                  tanh_encoder_output=False) -> None:
         super().__init__()
@@ -106,6 +107,7 @@ class Actor(nn.Module):
         self.num_actions = num_actions
         self.num_priv_latent = num_priv_latent
         self.num_priv_explicit = num_priv_explicit
+        self.num_goals = num_goals
         self.if_scan_encode = scan_encoder_dims is not None and num_scan > 0
 
         if len(priv_encoder_dims) > 0:
@@ -140,9 +142,19 @@ class Actor(nn.Module):
             self.scan_encoder = nn.Identity()
             self.scan_encoder_output_dim = num_scan
         
+        goal_encoder = []
+        goal_encoder.append(nn.Linear(num_goals, goal_hidden_dims[0]))
+        goal_encoder.append(activation)
+        for l in range(len(goal_hidden_dims) - 1):
+            goal_encoder.append(nn.Linear(goal_hidden_dims[l], goal_hidden_dims[l + 1]))
+            goal_encoder.append(activation)
+        self.goal_encoder = nn.Sequential(*goal_encoder)
+        self.goal_encoder_output_dim = goal_hidden_dims[-1]
+    
         actor_layers = []
         actor_layers.append(nn.Linear(num_prop+
                                       self.scan_encoder_output_dim+
+                                      self.goal_encoder_output_dim+
                                       num_priv_explicit+
                                       priv_encoder_output_dim, 
                                       actor_hidden_dims[0]))
@@ -173,7 +185,8 @@ class Actor(nn.Module):
                 latent = self.infer_hist_latent(obs)
             else:
                 latent = self.infer_priv_latent(obs)
-            backbone_input = torch.cat([obs_prop_scan, obs_priv_explicit, latent], dim=1)
+            goal_latent = self.goal_encoder(obs[:, self.num_prop + self.num_scan + self.num_priv_explicit + self.num_priv_latent: self.num_prop + self.num_scan + self.num_priv_explicit + self.num_priv_latent + self.num_goals])
+            backbone_input = torch.cat([obs_prop_scan, obs_priv_explicit, goal_latent, latent], dim=1)
             backbone_output = self.actor_backbone(backbone_input)
             return backbone_output
         else:
@@ -191,7 +204,8 @@ class Actor(nn.Module):
                 latent = self.infer_hist_latent(obs)
             else:
                 latent = self.infer_priv_latent(obs)
-            backbone_input = torch.cat([obs_prop_scan, obs_priv_explicit, latent], dim=1)
+            goal_latent = self.goal_encoder(obs[:, self.num_prop + self.num_scan + self.num_priv_explicit + self.num_priv_latent: self.num_prop + self.num_scan + self.num_priv_explicit + self.num_priv_latent + self.num_goals])
+            backbone_input = torch.cat([obs_prop_scan, obs_priv_explicit, goal_latent, latent], dim=1)
             backbone_output = self.actor_backbone(backbone_input)
             return backbone_output
     
@@ -214,11 +228,13 @@ class ActorCriticRMA(nn.Module):
                         num_critic_obs,
                         num_priv_latent, 
                         num_priv_explicit,
+                        num_goals,
                         num_hist,
                         num_actions,
                         scan_encoder_dims=[256, 256, 256],
                         actor_hidden_dims=[256, 256, 256],
                         critic_hidden_dims=[256, 256, 256],
+                        goal_hidden_dims=[16, 16, 3],
                         activation='elu',
                         init_noise_std=1.0,
                         **kwargs):
@@ -230,8 +246,7 @@ class ActorCriticRMA(nn.Module):
         priv_encoder_dims= kwargs['priv_encoder_dims']
         activation = get_activation(activation)
         
-        self.actor = Actor(num_prop, num_scan, num_actions, scan_encoder_dims, actor_hidden_dims, priv_encoder_dims, num_priv_latent, num_priv_explicit, num_hist, activation, tanh_encoder_output=kwargs['tanh_encoder_output'])
-        
+        self.actor = Actor(num_prop, num_scan, num_actions, scan_encoder_dims, actor_hidden_dims, priv_encoder_dims, goal_hidden_dims, num_priv_latent, num_priv_explicit, num_goals, num_hist, activation, tanh_encoder_output=kwargs['tanh_encoder_output'])
 
         # Value function
         critic_layers = []

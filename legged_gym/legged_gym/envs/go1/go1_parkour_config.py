@@ -41,24 +41,24 @@ class Go1ParkourCfg(LeggedRobotCfg):
     class env:
         num_envs = 4096
         obs_components = [
-            "proprioception", # 48
+            "proprioception", # 46
             "height_measurements", # 187
             "base_pose",        # explicit
-            "goal",             # goal
             "robot_config",     # latent
+            "goal",             # goal
             "prop_history",     # history
         ]
-        n_proprio = 47
+        n_proprio = 46
         n_scan = 132
         n_base = 6
         n_priv_latent = n_robot_config = 1 + 3 + 1 + 12
         n_goal = 3 + 3 + 3
-        n_priv = n_priv_explicit = n_base + n_goal
+        n_priv = n_priv_explicit = n_base# + n_goal
         # n_priv = 3+3 +3
         # n_priv_latent = 4 + 1 + 12 +12
         # n_proprio = 3 + 2 + 3 + 4 + 36 + 5
         history_len = 10
-        num_observations = n_proprio + n_scan + history_len*n_proprio  #n_scan + n_proprio + n_priv #187 + 47 + 5 + 12 
+        num_observations = n_proprio + n_scan + history_len*n_proprio + n_priv_latent + n_goal + n_priv_explicit  #n_scan + n_proprio + n_priv #187 + 47 + 5 + 12 
         num_privileged_obs = None # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
         num_actions = 12
         env_spacing = 3.  # not used with heightfields/trimeshes 
@@ -161,7 +161,8 @@ class Go1ParkourCfg(LeggedRobotCfg):
         num_rows= 10 # number of terrain rows (levels)  # spreaded is benifitiall !
         num_cols = 40 # number of terrain cols (types)
         
-        goal_vec_ranges = [[0., 0.], [0., 0.], [-0.5, 0.5]]
+        # goal_vec_ranges = [[0., 0.], [0., 0.], [-0.5, 0.5]]
+        goal_vec_ranges = [[0., 0.], [0., 0.], [0., 0.]]
         # trimesh only:
         slope_treshold = 1.5# slopes above this threshold will be corrected to vertical surfaces
         origin_zero_z = True
@@ -249,8 +250,8 @@ class Go1ParkourCfg(LeggedRobotCfg):
         decimation = 4
 
     class asset( LeggedRobotCfg.asset ):
-        file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/go1/urdf/go1.urdf'
-        # file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/a1/urdf/a1.urdf'
+        # file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/go1/urdf/go1.urdf'
+        file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/a1/urdf/a1.urdf'
         foot_name = "foot"
         penalize_contacts_on = ["thigh", "calf"]
         terminate_after_contacts_on = ["base"]#, "thigh", "calf"]
