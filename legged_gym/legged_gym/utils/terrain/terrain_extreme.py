@@ -111,8 +111,8 @@ class Terrain:
             height = [(self.goal_vec_ranges[-1][-1] - self.goal_vec_ranges[-1][0]) / self.cfg.num_cols * j + self.goal_vec_ranges[-1][0],]
             for i in range(self.cfg.num_rows):
                 difficulty = i / (self.cfg.num_rows-1)
-                terrain = self.make_terrain_goal(height, difficulty)
-                self.add_terrain_to_map(terrain, i, j)
+                terrain, platform_height = self.make_terrain_goal(height, difficulty)
+                self.add_terrain_to_map(terrain, i, j, platform_height)
 
     def selected_terrain(self):
         terrain_type = self.cfg.terrain_kwargs.pop('type')
@@ -134,7 +134,7 @@ class Terrain:
         height = random.uniform(self.cfg.height[0], max_height)
         terrain_utils.random_uniform_terrain(terrain, min_height=-height, max_height=height, step=0.005, downsampled_scale=self.cfg.downsampled_scale)
 
-    def add_terrain_to_map(self, terrain, row, col):
+    def add_terrain_to_map(self, terrain, row, col, platform_height=0.):
         i = row
         j = col
         # map coordinate system
@@ -154,7 +154,8 @@ class Terrain:
         # if self.cfg.origin_zero_z:
         #     env_origin_z = 0
         # else:
-        env_origin_z = np.max(terrain.height_field_raw[x1:x2, y1:y2])*terrain.vertical_scale
+        env_origin_z = platform_height
+        # env_origin_z = np.max(terrain.height_field_raw[x1:x2, y1:y2])*terrain.vertical_scale
         self.env_origins[i, j] = [env_origin_x, env_origin_y, env_origin_z]
         # self.terrain_type[i, j] = terrain.idx
         self.goals[i, j] = terrain.goals + [i * self.env_length, j * self.env_width, 0]
@@ -168,12 +169,13 @@ class Terrain:
                                 vertical_scale=self.cfg.vertical_scale,
                                 horizontal_scale=self.cfg.horizontal_scale)
         
-        if np.abs(goal_vec[-1]) < 0.1:
-            parkour_step_terrain(terrain, num_stones=1, step_height=goal_vec[-1])
+        if np.abs(goal_vec[-1]) > 0.1:
+            platform_height = parkour_step_terrain(terrain, num_stones=1, step_height=goal_vec[-1])
+            platform_height = 0. if goal_vec[-1] > 0. else -goal_vec[-1]
             self.add_roughness(terrain)
         else:
             gap_size = 0.1 + difficulty * 1.
-            parkour_gap_terrain(terrain,
+            platform_height = parkour_gap_terrain(terrain,
                                 gap_size=gap_size,
                                 gap_depth=[0.2, 1],
                                 pad_height=0,
@@ -183,7 +185,7 @@ class Terrain:
                                 # flat=True
                                 )
             self.add_roughness(terrain)
-        return terrain
+        return terrain, platform_height
     
 def parkour_gap_terrain(terrain,
                            platform_len=1.0, 
@@ -236,6 +238,8 @@ def parkour_gap_terrain(terrain,
     terrain.height_field_raw[:, -pad_width:] = pad_height
     terrain.height_field_raw[:pad_width, :] = pad_height
     terrain.height_field_raw[-pad_width:, :] = pad_height
+
+    return platform_height
 
 def parkour_step_terrain(terrain,
                         platform_len=2.0, 
@@ -301,6 +305,8 @@ def parkour_step_terrain(terrain,
     terrain.height_field_raw[:, -pad_width:] = pad_height
     terrain.height_field_raw[:pad_width, :] = pad_height
     terrain.height_field_raw[-pad_width:, :] = pad_height
+
+    return platform_height
 
 def convert_heightfield_to_trimesh_delatin(height_field_raw, horizontal_scale, vertical_scale, max_error=0.01):
     mesh = Delatin(np.flip(height_field_raw, axis=1).T, z_scale=vertical_scale, max_error=max_error)
@@ -416,7 +422,7 @@ if __name__ == "__main__":
         num_rows= 10 # number of terrain rows (levels)  # spreaded is benifitiall !
         num_cols = 40 # number of terrain cols (types)
         
-        goal_vec_ranges = np.array([[0., 0.], [0., 0.], [-0.5, 0.5]])
+        goal_vec_ranges = np.array([[0., 0.], [0., 0.], [-1.0, 1.0]])
         # trimesh only:
         slope_treshold = 1.5# slopes above this threshold will be corrected to vertical surfaces
         origin_zero_z = True
@@ -535,6 +541,30 @@ if __name__ == "__main__":
     gym.subscribe_viewer_keyboard_event(
         viewer, gymapi.KEY_D, "right_turn")
 
+    def _draw_height_samples(i):
+        """ Draws visualizations for dubugging (slows down simulation a lot).
+            Default behaviour: draws height measurement points
+        """
+        # draw height lines
+        gym.refresh_rigid_body_state_tensor(sim)
+        sphere_geom = gymutil.WireframeSphereGeometry(0.5, 4, 4, None, color=(1, 1, 0), color2=(1, 0, 0))
+        base_pos = (t.env_origins[0, i, :3])#.cpu().numpy()
+        # heights = measured_heights[i].cpu().numpy()
+        # height_points = quat_apply_yaw(base_quat[i].repeat(heights.shape[0]), self.height_points[i]).cpu().numpy()
+        # for j in range(heights.shape[0]):
+        #     x = height_points[j, 0] + base_pos[0]
+        #     y = height_points[j, 1] + base_pos[1]
+        #     z = heights[j]
+        sphere_pose = gymapi.Transform(gymapi.Vec3(base_pos[0], base_pos[1], base_pos[2]), r=None)
+        print(base_pos[2])
+        gymutil.draw_lines(sphere_geom, gym, viewer, None, sphere_pose)
+    
+
+    _draw_height_samples(1)
+    _draw_height_samples(2)
+    _draw_height_samples(3)
+    _draw_height_samples(0)
+
     while not gym.query_viewer_has_closed(viewer):
 
         # Get input actions from the viewer and handle them appropriately
@@ -553,6 +583,11 @@ if __name__ == "__main__":
         # Wait for dt to elapse in real time.
         # This synchronizes the physics simulation with the rendering rate.
         gym.sync_frame_time(sim)
+
+    
+    # for i in range(len(envs)):
+    #     print("here")
+    #     _draw_height_samples(i)
 
     gym.destroy_viewer(viewer)
     gym.destroy_sim(sim)

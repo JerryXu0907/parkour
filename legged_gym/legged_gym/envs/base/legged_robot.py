@@ -152,7 +152,8 @@ class LeggedRobot(BaseTask):
     def check_termination(self):
         """ Check if environments need to be reset
         """
-        self.reset_buf = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1., dim=1)
+        # self.reset_buf = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1., dim=1)
+        self.reset_buf = torch.zeros((self.num_envs, ), dtype=torch.bool, device=self.device)
         self.time_out_buf = self.episode_length_buf > self.max_episode_length # no terminal reward for time-outs
         self.reset_buf |= self.time_out_buf
 
@@ -394,9 +395,9 @@ class LeggedRobot(BaseTask):
         else:
             self.dof_pos[env_ids] = self.default_dof_pos
         # self.dof_vel[env_ids] = 0. # history init method
-        dof_vel_range = getattr(self.cfg.domain_rand, "init_dof_vel_range", [-3., 3.])
-        self.dof_vel[env_ids] = torch.rand_like(self.dof_vel[env_ids]) * abs(dof_vel_range[1] - dof_vel_range[0]) + min(dof_vel_range)
-
+        # dof_vel_range = getattr(self.cfg.domain_rand, "init_dof_vel_range", [-3., 3.])
+        # self.dof_vel[env_ids] = torch.rand_like(self.dof_vel[env_ids]) * abs(dof_vel_range[1] - dof_vel_range[0]) + min(dof_vel_range)
+        self.dof_vel[env_ids] = 0.
         # Each env has multiple actors. So the actor index is not the same as env_id. But robot actor is always the first.
         dof_idx = env_ids * self.all_root_states.shape[0] / self.num_envs
         dof_idx_int32 = dof_idx.to(dtype=torch.int32)

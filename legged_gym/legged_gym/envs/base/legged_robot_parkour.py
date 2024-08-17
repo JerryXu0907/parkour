@@ -53,6 +53,28 @@ TODO:
         
 '''
 
+def euler_from_quaternion(quat_angle):
+        """
+        Convert a quaternion into euler angles (roll, pitch, yaw)
+        roll is rotation around x in radians (counterclockwise)
+        pitch is rotation around y in radians (counterclockwise)
+        yaw is rotation around z in radians (counterclockwise)
+        """
+        x = quat_angle[:,0]; y = quat_angle[:,1]; z = quat_angle[:,2]; w = quat_angle[:,3]
+        t0 = +2.0 * (w * x + y * z)
+        t1 = +1.0 - 2.0 * (x * x + y * y)
+        roll_x = torch.atan2(t0, t1)
+     
+        t2 = +2.0 * (w * y - z * x)
+        t2 = torch.clip(t2, -1, 1)
+        pitch_y = torch.asin(t2)
+     
+        t3 = +2.0 * (w * z + x * y)
+        t4 = +1.0 - 2.0 * (y * y + z * z)
+        yaw_z = torch.atan2(t3, t4)
+     
+        return roll_x, pitch_y, yaw_z # in radians
+
 class LeggedRobotParkour(LeggedRobot):
 
     # ------------init--------------
@@ -144,7 +166,8 @@ class LeggedRobotParkour(LeggedRobot):
         self.base_ang_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
         self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
         
-        self.roll, self.pitch, self.yaw = get_euler_xyz(self.base_quat)
+        # self.roll, self.pitch, self.yaw = get_euler_xyz(self.base_quat)
+        self.roll, self.pitch, self.yaw = euler_from_quaternion(self.base_quat)
 
         contact = torch.norm(self.contact_forces[:, self.feet_indices], dim=-1) > 2.
         self.contact_filt = torch.logical_or(contact, self.last_contacts) 
@@ -333,77 +356,6 @@ class LeggedRobotParkour(LeggedRobot):
 
         self.max_power_per_timestep = torch.zeros(self.num_envs, dtype= torch.float32, device= self.device)
         all_obs_components = self.all_obs_components
-
-        # init action delay buffer
-        # if getattr(self.cfg.control, "action_delay", False):
-        #     assert hasattr(self.cfg.control, "action_delay_range") and hasattr(self.cfg.control, "action_delay_resample_time"), "Please specify action_delay_range and action_delay_resample_time in the config file."
-        #     """ Used in pre-physics step """
-        #     self.cfg.control.action_history_buffer_length = int((self.cfg.control.action_delay_range[1] + self.dt) / self.dt)
-        #     self.actions_history_buffer = torch.zeros(
-        #         (
-        #             self.cfg.control.action_history_buffer_length,
-        #             self.num_envs,
-        #             self.num_actions,
-        #         ),
-        #         dtype= torch.float32,
-        #         device= self.device,
-        #     )
-        #     self.current_action_delay = torch_rand_float(
-        #         self.cfg.control.action_delay_range[0],
-        #         self.cfg.control.action_delay_range[1],
-        #         (self.num_envs, 1),
-        #         device= self.device,
-        #     ).flatten()
-        #     self.action_delayed_frames = ((self.current_action_delay / self.dt) + 1).to(int)
-
-        # # init proprioception delay buffer
-        # if "proprioception" in all_obs_components and hasattr(self.cfg.sensor, "proprioception"):
-        #     """ Adding proprioception delay buffer """
-        #     self.cfg.sensor.proprioception.buffer_length = int((self.cfg.sensor.proprioception.latency_range[1] + self.dt) / self.dt)
-        #     self.proprioception_buffer = torch.zeros(
-        #         (
-        #             self.cfg.sensor.proprioception.buffer_length,
-        #             self.num_envs,
-        #             self.get_num_obs_from_components(["proprioception"]),
-        #         ),
-        #         dtype= torch.float32,
-        #         device= self.device,
-        #     )
-        #     self.current_proprioception_latency = torch_rand_float(
-        #         self.cfg.sensor.proprioception.latency_range[0],
-        #         self.cfg.sensor.proprioception.latency_range[1],
-        #         (self.num_envs, 1),
-        #         device= self.device,
-        #     ).flatten()
-        #     self.proprioception_delayed_frames = ((self.current_proprioception_latency / self.dt) + 1).to(int)
-
-        # # init depth sensor and delay
-        # if "forward_depth" in all_obs_components and hasattr(self.cfg.sensor, "forward_camera"):
-        #     output_resolution = getattr(self.cfg.sensor.forward_camera, "output_resolution", self.cfg.sensor.forward_camera.resolution)
-        #     self.cfg.sensor.forward_camera.buffer_length = int((self.cfg.sensor.forward_camera.latency_range[1] + self.cfg.sensor.forward_camera.refresh_duration) / self.dt)
-        #     self.forward_depth_buffer = torch.zeros(
-        #         (
-        #             self.cfg.sensor.forward_camera.buffer_length,
-        #             self.num_envs, 
-        #             1,
-        #             output_resolution[0],
-        #             output_resolution[1],
-        #         ),
-        #         dtype= torch.float32,
-        #         device= self.device,
-        #     )
-        #     self.forward_depth_delayed_frames = torch.ones((self.num_envs,), device= self.device, dtype= int) * self.cfg.sensor.forward_camera.buffer_length
-        #     self.current_forward_camera_latency = torch_rand_float(
-        #         self.cfg.sensor.forward_camera.latency_range[0],
-        #         self.cfg.sensor.forward_camera.latency_range[1],
-        #         (self.num_envs, 1),
-        #         device= self.device,
-        #     ).flatten()
-        #     if hasattr(self.cfg.sensor.forward_camera, "resized_resolution"):
-        #         self.forward_depth_resize_transform = T.Resize(
-        #             self.cfg.sensor.forward_camera.resized_resolution,
-        #             interpolation= T.InterpolationMode.BICUBIC,
-        #         )
         
         self.contour_detection_kernel = torch.zeros(
             (8, 1, 3, 3),
