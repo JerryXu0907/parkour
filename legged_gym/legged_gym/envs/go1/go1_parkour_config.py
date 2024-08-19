@@ -302,6 +302,7 @@ class Go1ParkourCfg(LeggedRobotCfg):
             dof_error = -0.04
             feet_stumble = -1
             feet_edge = -1
+            goal_vel_align = 1.0
             
         only_positive_rewards = True # if true negative total rewards are clipped at zero (avoids early termination problems)
         tracking_sigma = 0.2 # tracking reward = exp(-error^2/sigma)

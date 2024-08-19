@@ -743,8 +743,14 @@ class LeggedRobotParkour(LeggedRobot):
         return rew
 
     def _reward_lin_pos_x(self):
-        return torch.abs((self.root_states[:, :3] - self.env_origins)[:, 1])
+        return (self.root_states[:, :3] - self.last_root_pos)[:, 1]
     
+    def _reward_goal_vel_align(self):
+        rew = torch.abs(self.root_states[:, 7:10] - self.goal_velocities)
+        return_rew = torch.zeros_like(rew)
+        return_rew[self.reached_goal_ids] = rew[self.reached_goal_ids]
+        return return_rew
+
     # -----------Debug-------------------
     def _draw_debug_vis(self):
         return super()._draw_debug_vis()

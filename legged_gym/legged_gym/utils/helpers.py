@@ -178,6 +178,10 @@ def get_args(custom_args=[]):
         {"name": "--num_envs", "type": int, "help": "Number of environments to create. Overrides config file if provided."},
         {"name": "--seed", "type": int, "help": "Random seed. Overrides config file if provided."},
         {"name": "--max_iterations", "type": int, "help": "Maximum number of training iterations. Overrides config file if provided."},
+        {"name": "--exptid", "type": str, "default": "0000", "help": "the experiment id"},
+        {"name": "--proj_name", "type": str, "default": "go1_parkour", "help": "the project name for wandb"},
+        {"name": "--debug", "action": "store_true", "defualt": False, "help": "put in debug mode"},
+        {"name": "--no_wandb", "action": "store_true", "defualt": False, "help": "if no wandb"}
     ] + custom_args
     # parse arguments
     args = gymutil.parse_arguments(
