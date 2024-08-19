@@ -746,7 +746,8 @@ class LeggedRobotParkour(LeggedRobot):
         return (self.root_states[:, :3] - self.last_root_pos)[:, 1]
     
     def _reward_goal_vel_align(self):
-        rew = torch.abs(self.root_states[:, 7:10] - self.goal_velocities)
+        rew = torch.sum(torch.square(self.root_states[:, 7:10] - self.goal_velocities), dim=1)
+        rew = torch.exp(-rew/self.cfg.rewards.tracking_sigma)
         return_rew = torch.zeros_like(rew)
         return_rew[self.reached_goal_ids] = rew[self.reached_goal_ids]
         return return_rew
