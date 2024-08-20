@@ -750,7 +750,7 @@ class LeggedRobotParkour(LeggedRobot):
         return rew
 
     def _reward_lin_pos_x(self):
-        return (self.root_states[:, :3] - self.last_root_pos)[:, 1]
+        return (self.root_states[:, :3] - self.last_root_pos)[:, 0]
     
     def _reward_goal_vel_align(self):
         rew = torch.sum(torch.square(self.root_states[:, 7:10] - self.goal_velocities), dim=1)
