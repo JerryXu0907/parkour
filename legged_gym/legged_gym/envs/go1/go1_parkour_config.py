@@ -283,7 +283,6 @@ class Go1ParkourCfg(LeggedRobotCfg):
             # dof_error = -0.04
             # feet_stumble = -1
             # feet_edge = -1
-
             tracking_ang_vel = 0.05
             world_vel_l2norm = -1.
             legs_energy_substeps = -2e-5

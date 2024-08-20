@@ -131,7 +131,26 @@ class Terrain:
             else:
                 for i in range(self.cfg.num_rows):
                     difficulty = i / (self.cfg.num_rows-1)
-                    terrain, platform_height = self.make_terrain_goal(height, difficulty)
+                    if difficulty < 0.2:
+                        terrain = terrain_utils.SubTerrain("terrain",
+                                width=self.length_per_env_pixels,
+                                length=self.width_per_env_pixels,
+                                vertical_scale=self.cfg.vertical_scale,
+                                horizontal_scale=self.cfg.horizontal_scale)
+                        gap_size = 0.
+                        platform_height = parkour_gap_terrain(terrain,
+                                            gap_size=gap_size,
+                                            gap_depth=[0.2, 1],
+                                            pad_height=0,
+                                            x_range=[0.8, 1.5],
+                                            y_range=self.cfg.y_range,
+                                            half_valid_width=[0.6, 1.2],
+                                            # flat=True
+                                            )
+                        self.add_roughness(terrain)
+                        self.add_terrain_to_map(terrain, i, j, platform_height)
+                    else:
+                        terrain, platform_height = self.make_terrain_goal(height, difficulty)
                     self.add_terrain_to_map(terrain, i, j, platform_height)
                 
 
