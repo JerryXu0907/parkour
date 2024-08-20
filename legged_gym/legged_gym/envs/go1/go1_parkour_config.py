@@ -267,22 +267,31 @@ class Go1ParkourCfg(LeggedRobotCfg):
         class scales:
             # tracking rewards
             # tracking_goal_vel = 1.5
-            tracking_lin_vel = 3.0
+            # tracking_lin_vel = 3.0
             tracking_yaw = 0.5
-            lin_pos_x = 10.0
-            # regularization rewards
-            lin_vel_z = -1.0
-            ang_vel_xy = -0.05
-            orientation = -1.
-            dof_acc = -2.5e-7
-            collision = -10.
-            action_rate = -0.1
-            delta_torques = -1.0e-7
-            torques = -0.00001
-            hip_pos = -0.5
-            dof_error = -0.04
-            feet_stumble = -1
-            feet_edge = -1
+            # lin_pos_x = 10.0
+            # # regularization rewards
+            # lin_vel_z = -1.0
+            # ang_vel_xy = -0.05
+            # orientation = -1.
+            # dof_acc = -2.5e-7
+            # collision = -10.
+            # action_rate = -0.1
+            # delta_torques = -1.0e-7
+            # torques = -0.00001
+            # hip_pos = -0.5
+            # dof_error = -0.04
+            # feet_stumble = -1
+            # feet_edge = -1
+
+            tracking_ang_vel = 0.05
+            world_vel_l2norm = -1.
+            legs_energy_substeps = -2e-5
+            legs_energy = -0.
+            alive = 2.
+            # penalty for hardware safety
+            exceed_dof_pos_limits = -1e-1
+            exceed_torque_limits_i = -2e-1
         soft_dof_pos_limit = 0.9
         base_height_target = 0.25
         only_positive_rewards = True # if true negative total rewards are clipped at zero (avoids early termination problems)

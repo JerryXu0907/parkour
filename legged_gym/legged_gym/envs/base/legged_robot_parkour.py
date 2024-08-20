@@ -767,6 +767,247 @@ class LeggedRobotParkour(LeggedRobot):
         lin_vel_error = torch.square(1.5 - self.root_states[:, 7]) + torch.square(self.root_states[:, 8])
         return torch.exp(-lin_vel_error/self.cfg.rewards.tracking_sigma)
     
+    def _reward_lin_vel_l2norm(self):
+        return torch.norm((self.commands[:, :2] - self.base_lin_vel[:, :2]), dim= 1)
+
+    def _reward_world_vel_l2norm(self):
+        lin_vel_error = torch.square(1.5 - self.root_states[:, 7]) + torch.square(self.root_states[:, 8])
+        return torch.sqrt(lin_vel_error)
+
+    def _reward_tracking_world_vel(self):
+        world_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.root_states[:, 7:9]), dim= 1)
+        return torch.exp(-world_vel_error/self.cfg.rewards.tracking_sigma)
+
+    def _reward_legs_energy(self):
+        return torch.sum(torch.square(self.torques * self.dof_vel), dim=1)
+
+    def _reward_legs_energy_substeps(self):
+        # (n_envs, n_substeps, n_dofs) 
+        # square sum -> (n_envs, n_substeps)
+        # mean -> (n_envs,)
+        return torch.mean(torch.sum(torch.square(self.substep_torques * self.substep_dof_vel), dim=-1), dim=-1)
+
+    def _reward_legs_energy_abs(self):
+        return torch.sum(torch.abs(self.torques * self.dof_vel), dim=1)
+
+    def _reward_alive(self):
+        return 1.
+
+    def _reward_dof_error(self):
+        dof_error = torch.sum(torch.square(self.dof_pos - self.default_dof_pos), dim=1)
+        return dof_error
+
+    def _reward_lin_cmd(self):
+        """ This reward term does not depend on the policy, depends on the command """
+        return torch.norm(self.commands[:, :2], dim= 1)
+
+    def _reward_lin_vel_x(self):
+        return self.root_states[:, 7]
+    
+    def _reward_lin_vel_y_abs(self):
+        return torch.abs(self.root_states[:, 8])
+    
+    def _reward_lin_vel_y_square(self):
+        return torch.square(self.root_states[:, 8])
+
+    def _reward_lin_pos_y(self):
+        return torch.abs((self.root_states[:, :3] - self.env_origins)[:, 1])
+    
+    def _reward_yaw_abs(self):
+        """ Aiming for the robot yaw to be zero (pointing to the positive x-axis) """
+        yaw = get_euler_xyz(self.root_states[:, 3:7])[2]
+        yaw[yaw > np.pi] -= np.pi * 2 # to range (-pi, pi)
+        yaw[yaw < -np.pi] += np.pi * 2 # to range (-pi, pi)
+        return torch.abs(yaw)
+
+    def _reward_penetrate_depth(self):
+        if not self.check_BarrierTrack_terrain(): return torch.zeros_like(self.root_states[:, 0])
+        self.refresh_volume_sample_points()
+        penetration_depths = self.terrain.get_penetration_depths(self.volume_sample_points.view(-1, 3)).view(self.num_envs, -1)
+        penetration_depths *= torch.norm(self.velocity_sample_points, dim= -1) + 1e-3
+        return torch.sum(penetration_depths, dim= -1)
+
+    def _reward_penetrate_volume(self):
+        if not self.check_BarrierTrack_terrain(): return torch.zeros_like(self.root_states[:, 0])
+        self.refresh_volume_sample_points()
+        penetration_mask = self.terrain.get_penetration_mask(self.volume_sample_points.view(-1, 3)).view(self.num_envs, -1)
+        penetration_mask *= torch.norm(self.velocity_sample_points, dim= -1) + 1e-3
+        return torch.sum(penetration_mask, dim= -1)
+
+    def _reward_tilt_cond(self):
+        """ Conditioned reward term in terms of whether the robot is engaging the tilt obstacle
+        Use positive factor to enable rolling angle when incountering tilt obstacle
+        """
+        if not self.check_BarrierTrack_terrain(): return torch.zeros_like(self.root_states[:, 0])
+        roll, pitch, yaw = get_euler_xyz(self.root_states[:, 3:7])
+        pi = torch.acos(torch.zeros(1)).item() * 2 # which is 3.1415927410125732
+        roll[roll > pi] -= pi * 2 # to range (-pi, pi)
+        roll[roll < -pi] += pi * 2 # to range (-pi, pi)
+        if hasattr(self, "volume_sample_points"):
+            self.refresh_volume_sample_points()
+            stepping_obstacle_info = self.terrain.get_stepping_obstacle_info(self.volume_sample_points.view(-1, 3))
+        else:
+            stepping_obstacle_info = self.terrain.get_stepping_obstacle_info(self.root_states[:, :3])
+        stepping_obstacle_info = stepping_obstacle_info.view(self.num_envs, -1, stepping_obstacle_info.shape[-1])
+        # Assuming that each robot will only be in one obstacle or non obstacle.
+        robot_stepping_obstacle_id = torch.max(stepping_obstacle_info[:, :, 0], dim= -1)[0]
+        tilting_mask = robot_stepping_obstacle_id == self.terrain.track_options_id_dict["tilt"]
+        return_ = torch.where(tilting_mask, torch.clip(torch.abs(roll), 0, torch.pi/2), -torch.clip(torch.abs(roll), 0, torch.pi/2))
+        return return_
+
+    def _reward_hip_pos(self):
+        return torch.sum(torch.square(self.dof_pos[:, self.hip_indices] - self.default_dof_pos[:, self.hip_indices]), dim=1)
+
+    def _reward_front_hip_pos(self):
+        """ Reward the robot to stop moving its front hips """
+        return torch.sum(torch.square(self.dof_pos[:, self.front_hip_indices] - self.default_dof_pos[:, self.front_hip_indices]), dim=1)
+
+    def _reward_rear_hip_pos(self):
+        """ Reward the robot to stop moving its rear hips """
+        return torch.sum(torch.square(self.dof_pos[:, self.rear_hip_indices] - self.default_dof_pos[:, self.rear_hip_indices]), dim=1)
+    
+    def _reward_down_cond(self):
+        if not self.check_BarrierTrack_terrain(): return torch.zeros_like(self.root_states[:, 0])
+        if not hasattr(self, "volume_sample_points"): return torch.zeros_like(self.root_states[:, 0])
+        self.refresh_volume_sample_points()
+        engaging_obstacle_info = self.terrain.get_engaging_block_info(
+            self.root_states[:, :3],
+            self.volume_sample_points - self.root_states[:, :3].unsqueeze(-2), # (n_envs, n_points, 3)
+        )
+        roll, pitch, yaw = get_euler_xyz(self.root_states[:, 3:7])
+        pi = torch.acos(torch.zeros(1)).item() * 2 # which is 3.1415927410125732
+        pitch[pitch > pi] -= pi * 2 # to range (-pi, pi)
+        pitch[pitch < -pi] += pi * 2 # to range (-pi, pi)
+        engaging_mask = (engaging_obstacle_info[:, 1 + self.terrain.track_options_id_dict["jump"]] > 0) \
+            & (engaging_obstacle_info[:, 1 + self.terrain.max_track_options + 2] < 0.)
+        pitch_err = torch.abs(pitch - 0.2)
+        return torch.exp(-pitch_err/self.cfg.rewards.tracking_sigma) * engaging_mask # the higher positive factor, the more you want the robot to pitch down 0.2 rad
+
+    def _reward_jump_x_vel_cond(self):
+        if not self.check_BarrierTrack_terrain(): return torch.zeros_like(self.root_states[:, 0])
+        if not hasattr(self, "volume_sample_points"): return torch.zeros_like(self.root_states[:, 0])
+        self.refresh_volume_sample_points()
+        engaging_obstacle_info = self.terrain.get_engaging_block_info(
+            self.root_states[:, :3],
+            self.volume_sample_points - self.root_states[:, :3].unsqueeze(-2), # (n_envs, n_points, 3)
+        )
+        engaging_mask = (engaging_obstacle_info[:, 1 + self.terrain.track_options_id_dict["jump"]] > 0) \
+            & (engaging_obstacle_info[:, 1 + self.terrain.max_track_options + 2] > 0.) \
+            & (engaging_obstacle_info[:, 0] > 0) # engaging jump-up, not engaging jump-down, positive distance.
+        roll, pitch, yaw = get_euler_xyz(self.root_states[:, 3:7])
+        pi = torch.acos(torch.zeros(1)).item() * 2 # which is 3.1415927410125732
+        pitch[pitch > pi] -= pi * 2 # to range (-pi, pi)
+        pitch[pitch < -pi] += pi * 2 # to range (-pi, pi)
+        pitch_up_mask = pitch < -0.75 # a hack value
+
+        return torch.clip(self.base_lin_vel[:, 0], max= 1.5) * engaging_mask * pitch_up_mask
+
+    def _reward_sync_legs_cond(self):
+        """ A hack to force same actuation on both rear legs when jump. """
+        if not self.check_BarrierTrack_terrain(): return torch.zeros_like(self.root_states[:, 0])
+        if not hasattr(self, "volume_sample_points"): return torch.zeros_like(self.root_states[:, 0])
+        self.refresh_volume_sample_points()
+        engaging_obstacle_info = self.terrain.get_engaging_block_info(
+            self.root_states[:, :3],
+            self.volume_sample_points - self.root_states[:, :3].unsqueeze(-2), # (n_envs, n_points, 3)
+        )
+        engaging_mask = (engaging_obstacle_info[:, 1 + self.terrain.track_options_id_dict["jump"]] > 0) \
+            & (engaging_obstacle_info[:, 1 + self.terrain.max_track_options + 2] > 0.) \
+            & (engaging_obstacle_info[:, 0] > 0) # engaging jump-up, not engaging jump-down, positive distance.
+        rr_legs = torch.clone(self.actions[:, 6:9]) # shoulder, thigh, calf
+        rl_legs = torch.clone(self.actions[:, 9:12]) # shoulder, thigh, calf
+        rl_legs[:, 0] *= -1 # flip the sign of shoulder action
+        return torch.norm(rr_legs - rl_legs, dim= -1) * engaging_mask
+    
+    def _reward_sync_all_legs_cond(self):
+        """ A hack to force same actuation on both front/rear legs when jump. """
+        if not self.check_BarrierTrack_terrain(): return torch.zeros_like(self.root_states[:, 0])
+        if not hasattr(self, "volume_sample_points"): return torch.zeros_like(self.root_states[:, 0])
+        self.refresh_volume_sample_points()
+        engaging_obstacle_info = self.terrain.get_engaging_block_info(
+            self.root_states[:, :3],
+            self.volume_sample_points - self.root_states[:, :3].unsqueeze(-2), # (n_envs, n_points, 3)
+        )
+        engaging_mask = (engaging_obstacle_info[:, 1 + self.terrain.track_options_id_dict["jump"]] > 0) \
+            & (engaging_obstacle_info[:, 1 + self.terrain.max_track_options + 2] > 0.) \
+            & (engaging_obstacle_info[:, 0] > 0) # engaging jump-up, not engaging jump-down, positive distance.
+        right_legs = torch.clone(torch.cat([
+            self.actions[:, 0:3],
+            self.actions[:, 6:9],
+        ], dim= -1)) # shoulder, thigh, calf
+        left_legs = torch.clone(torch.cat([
+            self.actions[:, 3:6],
+            self.actions[:, 9:12],
+        ], dim= -1)) # shoulder, thigh, calf
+        left_legs[:, 0] *= -1 # flip the sign of shoulder action
+        left_legs[:, 3] *= -1 # flip the sign of shoulder action
+        return torch.norm(right_legs - left_legs, p= 1, dim= -1) * engaging_mask
+    
+    def _reward_sync_all_legs(self):
+        right_legs = torch.clone(torch.cat([
+            self.actions[:, 0:3],
+            self.actions[:, 6:9],
+        ], dim= -1)) # shoulder, thigh, calf
+        left_legs = torch.clone(torch.cat([
+            self.actions[:, 3:6],
+            self.actions[:, 9:12],
+        ], dim= -1)) # shoulder, thigh, calf
+        left_legs[:, 0] *= -1 # flip the sign of shoulder action
+        left_legs[:, 3] *= -1 # flip the sign of shoulder action
+        return torch.norm(right_legs - left_legs, p= 1, dim= -1)
+    
+    def _reward_dof_error_cond(self):
+        """ Force dof error when not engaging obstacle """
+        if not self.check_BarrierTrack_terrain(): return torch.zeros_like(self.root_states[:, 0])
+        if not hasattr(self, "volume_sample_points"): return torch.zeros_like(self.root_states[:, 0])
+        self.refresh_volume_sample_points()
+        engaging_obstacle_info = self.terrain.get_engaging_block_info(
+            self.root_states[:, :3],
+            self.volume_sample_points - self.root_states[:, :3].unsqueeze(-2), # (n_envs, n_points, 3)
+        )
+        engaging_mask = (engaging_obstacle_info[:, 1] > 0)
+        return torch.sum(torch.square(self.dof_pos - self.default_dof_pos), dim=1) * engaging_mask
+        
+    def _reward_leap_bonous_cond(self):
+        """ counteract the tracking reward loss during leap"""
+        if not self.check_BarrierTrack_terrain(): return torch.zeros_like(self.root_states[:, 0])
+        if not hasattr(self, "volume_sample_points"): return torch.zeros_like(self.root_states[:, 0])
+        self.refresh_volume_sample_points()
+        engaging_obstacle_info = self.terrain.get_engaging_block_info(
+            self.root_states[:, :3],
+            self.volume_sample_points - self.root_states[:, :3].unsqueeze(-2), # (n_envs, n_points, 3)
+        )
+        engaging_mask = (engaging_obstacle_info[:, 1 + self.terrain.track_options_id_dict["leap"]] > 0) \
+            & (-engaging_obstacle_info[:, 1 + self.terrain.max_track_options + 1] < engaging_obstacle_info[:, 0]) \
+            & (engaging_obstacle_info[:, 0] < 0.) # engaging jump-up, not engaging jump-down, positive distance.
+
+        world_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.root_states[:, 7:9]), dim= 1)
+        return (1 - torch.exp(-world_vel_error/self.cfg.rewards.tracking_sigma)) * engaging_mask # reverse version of tracking reward
+
+    def _reward_exceed_torque_limits_i(self):
+        """ Indicator function """
+        max_torques = torch.abs(self.substep_torques).max(dim= 1)[0]
+        exceed_torque_each_dof = max_torques > self.torque_limits
+        exceed_torque = exceed_torque_each_dof.any(dim= 1)
+        return exceed_torque.to(torch.float32)
+    
+    def _reward_exceed_torque_limits_square(self):
+        """ square function for exceeding part """
+        exceeded_torques = torch.abs(self.substep_torques) - self.torque_limits
+        exceeded_torques[exceeded_torques < 0.] = 0.
+        # sum along decimation axis and dof axis
+        return torch.square(exceeded_torques).sum(dim= 1).sum(dim= 1)
+    
+    def _reward_exceed_torque_limits_l1norm(self):
+        """ square function for exceeding part """
+        exceeded_torques = torch.abs(self.substep_torques) - self.torque_limits
+        exceeded_torques[exceeded_torques < 0.] = 0.
+        # sum along decimation axis and dof axis
+        return torch.norm(exceeded_torques, p= 1, dim= -1).sum(dim= 1)
+    
+    def _reward_exceed_dof_pos_limits(self):
+        return self.substep_exceed_dof_pos_limits.to(torch.float32).sum(dim= -1).mean(dim= -1)
+
     # -----------Debug-------------------
     def _draw_debug_vis(self):
         super()._draw_debug_vis()
