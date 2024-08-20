@@ -321,7 +321,7 @@ class LeggedRobotParkour(LeggedRobot):
         self.reach_goal_timer = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
         self.sensor_tensor_dict = defaultdict(list)
         self.init_base_vel = torch.zeros(self.num_envs, 6, dtype=torch.float, device=self.device, requires_grad=False)
-
+        self.max_speed_cmd = torch.ones(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False) * 3.0
         # gym sensing tensors
         for env_i, env_handle in enumerate(self.envs):
             if "forward_depth" in self.all_obs_components:
@@ -717,8 +717,8 @@ class LeggedRobotParkour(LeggedRobot):
     def _reward_tracking_goal_vel(self):
         norm = torch.norm(self.target_pos_rel, dim=-1, keepdim=True)
         target_vec_norm = self.target_pos_rel / (norm + 1e-5)
-        cur_vel = self.root_states[:, 7:10]
-        rew = torch.sum(target_vec_norm * cur_vel, dim=-1)
+        cur_vel = self.root_states[:, 7:9]
+        rew = torch.minimum(torch.sum(target_vec_norm[:, :2] * cur_vel, dim=-1), self.max_speed_cmd)
         return rew
 
     def _reward_tracking_yaw(self):
