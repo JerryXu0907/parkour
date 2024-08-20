@@ -641,7 +641,7 @@ class LeggedRobotParkour(LeggedRobot):
                             imu_obs,    # 2
                             self.delta_yaw[:, None],            # 1       
                             # self.commands[:, 0:1],  #[1,1]
-                            (self.dof_pos) * self.obs_scales.dof_pos,   #  12
+                            (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,   #  12
                             self.dof_vel * self.obs_scales.dof_vel,     #  12
                             self.last_actions,                          #  12
                             self.contact_filt.float()-0.5,              #  4
