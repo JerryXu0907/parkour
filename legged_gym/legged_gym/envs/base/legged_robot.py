@@ -66,7 +66,7 @@ class LeggedRobot(BaseTask):
         self.cfg = cfg
         self.sim_params = sim_params
         self.height_samples = None
-        self.debug_viz = getattr(self.cfg.viewer, "debug_viz", True)
+        self.debug_viz = getattr(self.cfg.viewer, "debug_viz", False)
         self.init_done = False
         self._parse_cfg(self.cfg)
         super().__init__(self.cfg, sim_params, physics_engine, sim_device, headless)
@@ -78,6 +78,7 @@ class LeggedRobot(BaseTask):
         cfg.terrain.measure_heights = True
         self.global_counter = 0
         self.init_done = True
+        
 
     def step(self, actions):
         """ Apply actions, simulate, call self.post_physics_step()

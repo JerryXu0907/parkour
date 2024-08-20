@@ -82,6 +82,8 @@ class LeggedRobotParkour(LeggedRobot):
         self.all_obs_components = cfg.env.obs_components
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
         self._prepare_termination_function()
+        self.reset_idx(torch.arange(self.num_envs, device=self.device))
+        self.post_physics_step()
 
     def step(self, actions, commands=None):
         if commands is not None:
