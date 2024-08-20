@@ -389,6 +389,8 @@ class OnPolicyRunner:
         wandb_dict = {}
         if locs['ep_infos']:
             for key in locs['ep_infos'][0]:
+                if "frame" in key:
+                    continue
                 infotensor = torch.tensor([], device=self.device)
                 for ep_info in locs['ep_infos']:
                     # handle scalar and zero dimensional tensor infos

@@ -66,11 +66,10 @@ class Go1ParkourCfg(LeggedRobotCfg):
         episode_length_s = 20 # episode length in seconds
         obs_type = "og"
         history_encoding = True
-        reorder_dofs = True
         include_foot_contacts = True
-        randomize_start_pos = True
-        randomize_start_vel = True
-        randomize_start_yaw = True
+        randomize_start_pos = False#True
+        randomize_start_vel = False#True
+        randomize_start_yaw = False#True
         rand_yaw_range = 1.2
         randomize_start_y = False
         rand_y_range = 0.5
@@ -217,26 +216,7 @@ class Go1ParkourCfg(LeggedRobotCfg):
             'FR_calf_joint': -1.5,  # [rad]
             'RR_calf_joint': -1.5,    # [rad]
         }
-
-    class init_state_slope( LeggedRobotCfg.init_state ):
-        pos = [0.56, 0.0, 0.24] # x,y,z [m]
-        default_joint_angles = { # = target angles [rad] when action = 0.0
-            'FL_hip_joint': 0.03,   # [rad]
-            'RL_hip_joint': 0.03,   # [rad]
-            'FR_hip_joint': -0.03,  # [rad]
-            'RR_hip_joint': -0.03,   # [rad]
-
-            'FL_thigh_joint': 1.0,     # [rad]
-            'RL_thigh_joint': 1.9,   # [rad]1.8
-            'FR_thigh_joint': 1.0,     # [rad]
-            'RR_thigh_joint': 1.9,   # [rad]
-
-            'FL_calf_joint': -2.2,   # [rad]
-            'RL_calf_joint': -0.9,    # [rad]
-            'FR_calf_joint': -2.2,  # [rad]
-            'RR_calf_joint': -0.9,    # [rad]
-        }
-        
+    
     class control( LeggedRobotCfg.control ):
         # PD Drive parameters:
         control_type = 'P'
@@ -271,7 +251,7 @@ class Go1ParkourCfg(LeggedRobotCfg):
         push_robots = True
         push_interval_s = 8
         max_push_vel_xy = 0.5
-        init_base_vel_range = [-0.8, 0.8]
+        init_base_vel_range = [0, 0.8]
         randomize_motor = True
         leg_motor_strength_range = [0.8, 1.2]
 
@@ -286,9 +266,10 @@ class Go1ParkourCfg(LeggedRobotCfg):
     class rewards:
         class scales:
             # tracking rewards
-            tracking_goal_vel = 1.5
+            # tracking_goal_vel = 1.5
+            tracking_lin_vel = 3.0
             tracking_yaw = 0.5
-            lin_pos_x = 2.0
+            lin_pos_x = 10.0
             # regularization rewards
             lin_vel_z = -1.0
             ang_vel_xy = -0.05
@@ -302,13 +283,14 @@ class Go1ParkourCfg(LeggedRobotCfg):
             dof_error = -0.04
             feet_stumble = -1
             feet_edge = -1
-            
+        soft_dof_pos_limit = 0.9
+        base_height_target = 0.25
         only_positive_rewards = True # if true negative total rewards are clipped at zero (avoids early termination problems)
         tracking_sigma = 0.2 # tracking reward = exp(-error^2/sigma)
-        soft_dof_pos_limit = 1. # percentage of urdf limits, values above this limit are penalized
+        # soft_dof_pos_limit = 1. # percentage of urdf limits, values above this limit are penalized
         soft_dof_vel_limit = 1
         soft_torque_limit = 0.4
-        base_height_target = 1.
+        # base_height_target = 1.
         max_contact_force = 40. # forces above this value are penalized
     # viewer camera:
     class viewer:
@@ -362,7 +344,7 @@ class Go1ParkourCfgPPO(BaseConfig):
         rnn_hidden_size = 512
         rnn_num_layers = 1
 
-        tanh_encoder_output = False
+        tanh_encoder_output = True #False
     
     class algorithm:
         # training params

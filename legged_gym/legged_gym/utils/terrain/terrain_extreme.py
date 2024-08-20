@@ -109,10 +109,31 @@ class Terrain:
         # self.goal_vec_ranges is a 3x2 vector
         for j in range(self.cfg.num_cols):
             height = [(self.goal_vec_ranges[-1][-1] - self.goal_vec_ranges[-1][0]) / self.cfg.num_cols * j + self.goal_vec_ranges[-1][0],]
-            for i in range(self.cfg.num_rows):
-                difficulty = i / (self.cfg.num_rows-1)
-                terrain, platform_height = self.make_terrain_goal(height, difficulty)
-                self.add_terrain_to_map(terrain, i, j, platform_height)
+            if self.cfg.num_cols // 2 - 5 <= j <= self.cfg.num_cols // 2 + 5:
+                for i in range(self.cfg.num_rows):
+                    terrain = terrain_utils.SubTerrain("terrain",
+                                width=self.length_per_env_pixels,
+                                length=self.width_per_env_pixels,
+                                vertical_scale=self.cfg.vertical_scale,
+                                horizontal_scale=self.cfg.horizontal_scale)
+                    gap_size = 0.
+                    platform_height = parkour_gap_terrain(terrain,
+                                        gap_size=gap_size,
+                                        gap_depth=[0.2, 1],
+                                        pad_height=0,
+                                        x_range=[0.8, 1.5],
+                                        y_range=self.cfg.y_range,
+                                        half_valid_width=[0.6, 1.2],
+                                        # flat=True
+                                        )
+                    self.add_roughness(terrain)
+                    self.add_terrain_to_map(terrain, i, j, platform_height)
+            else:
+                for i in range(self.cfg.num_rows):
+                    difficulty = i / (self.cfg.num_rows-1)
+                    terrain, platform_height = self.make_terrain_goal(height, difficulty)
+                    self.add_terrain_to_map(terrain, i, j, platform_height)
+                
 
     def selected_terrain(self):
         terrain_type = self.cfg.terrain_kwargs.pop('type')
