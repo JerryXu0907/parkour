@@ -459,7 +459,7 @@ class OnPolicyRunner:
                        f"""{'Iteration time:':>{pad}} {iteration_time:.2f}s\n"""
                        f"""{'Total time:':>{pad}} {self.tot_time:.2f}s\n"""
                        f"""{'ETA:':>{pad}} {mins:.0f} mins {secs:.1f} s\n""")
-        print(log_string)
+        # print(log_string)
 
     def save(self, path, infos=None):
         state_dict = {

@@ -448,6 +448,9 @@ class LeggedRobotParkour(LeggedRobot):
         self.reach_goal_timer[self.reached_goal_ids] += 1
 
         self.target_pos_rel = self.env_goals - self.root_states[:, :3]
+        # self.target_pos_rel = quat_rotate_inverse(self.base_quat, self.target_pos_rel)
+        # print(self.target_pos_rel)
+        # x = input()
 
         norm = torch.norm(self.target_pos_rel, dim=-1, keepdim=True)
         target_vec_norm = self.target_pos_rel / (norm + 1e-5)
@@ -529,12 +532,14 @@ class LeggedRobotParkour(LeggedRobot):
     # ---------- Setting Goals ---------
     def _init_goals(self):
         self.terrain_goals = torch.from_numpy(self.terrain.goals[:, :, 0]).to(self.device).to(torch.float)
-        self.env_goals = self.terrain_goals[self.terrain_levels, self.terrain_types] - self.root_states[:, :3]
+        self.env_goals = self.terrain_goals[self.terrain_levels, self.terrain_types] #- self.root_states[:, :3]
+        self.env_goals_rel = self.terrain_goals[self.terrain_levels, self.terrain_types] - self.root_states[:, :3]
         self.init_velocities = self.root_states[:, 7:10]
         self.goal_velocities = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range, self.env_goals.shape, device=self.device)
 
     def _reset_goals(self, env_ids):
-        self.env_goals[env_ids] = self.terrain_goals[self.terrain_levels[env_ids], self.terrain_types[env_ids]] - self.root_states[env_ids, :3]
+        self.env_goals[env_ids] = self.terrain_goals[self.terrain_levels[env_ids], self.terrain_types[env_ids]] #- self.root_states[env_ids, :3]
+        self.env_goals_rel[env_ids] = self.terrain_goals[self.terrain_levels[env_ids], self.terrain_types[env_ids]] - self.root_states[env_ids, :3]
         self.init_velocities[env_ids] = self.root_states[env_ids, 7:10]
         self.goal_velocities[env_ids] = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range, self.env_goals[env_ids].shape, device=self.device)
 
@@ -673,7 +678,7 @@ class LeggedRobotParkour(LeggedRobot):
         return self.robot_config_buffer
 
     def _get_goal_obs(self, privileged=False):
-        goal_obs_buf = torch.cat([self.env_goals, 
+        goal_obs_buf = torch.cat([self.env_goals_rel, 
                                   self.init_velocities * self.obs_scales.lin_vel,
                                   self.goal_velocities * self.obs_scales.lin_vel], dim=-1)
         return goal_obs_buf
@@ -754,4 +759,25 @@ class LeggedRobotParkour(LeggedRobot):
 
     # -----------Debug-------------------
     def _draw_debug_vis(self):
-        return super()._draw_debug_vis()
+        super()._draw_debug_vis()
+        for i in range(self.num_envs):
+            # sphere_geom = gymutil.WireframeSphereGeometry(0.1, 32, 32, None, color=(1, 0, 0))
+            # goal = self.terrain_goals[self.terrain_levels[i], self.terrain_types[i]].cpu().numpy()
+            # pose = gymapi.Transform(gymapi.Vec3(goal[0], goal[1], goal[2]), r=None)
+            # gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], pose)
+            
+            if not self.cfg.depth.use_camera:
+                sphere_geom_arrow = gymutil.WireframeSphereGeometry(0.02, 16, 16, None, color=(1, 0.35, 0.25))
+                pose_robot = self.root_states[i, :3].cpu().numpy()      # in world frame
+                for j in range(5):
+                    norm = torch.norm(self.target_pos_rel, dim=-1, keepdim=True)    # target_pos_rel is in world frame
+                    target_vec_norm = self.target_pos_rel / (norm + 1e-5)
+                    pose_arrow = pose_robot[:3] + 0.1*(j+3) * target_vec_norm[i, :3].cpu().numpy()
+                    pose = gymapi.Transform(gymapi.Vec3(pose_arrow[0], pose_arrow[1], pose_arrow[2]), r=None)
+                    gymutil.draw_lines(sphere_geom_arrow, self.gym, self.viewer, self.envs[i], pose)
+        sphere_geom = gymutil.WireframeSphereGeometry(0.1, 32, 32, None, color=(1, 0, 0))
+        for i in range(len(self.env_goals)):
+            for j in range(len(self.env_goals[0])):
+                goal = self.terrain_goals[i, j].cpu().numpy()
+                pose = gymapi.Transform(gymapi.Vec3(goal[0], goal[1], goal[2]), r=None)
+                gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[0], pose)

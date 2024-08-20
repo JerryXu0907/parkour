@@ -342,7 +342,7 @@ class Go1ParkourCfg(LeggedRobotCfg):
         termination_threshold = {
             'roll': 1.5,
             'pitch': 1.5,
-            'height': -0.25
+            'height': 0.
         }
 
 

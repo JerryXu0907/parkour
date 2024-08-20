@@ -66,7 +66,7 @@ class LeggedRobot(BaseTask):
         self.cfg = cfg
         self.sim_params = sim_params
         self.height_samples = None
-        self.debug_viz = getattr(self.cfg.viewer, "debug_viz", False)
+        self.debug_viz = getattr(self.cfg.viewer, "debug_viz", True)
         self.init_done = False
         self._parse_cfg(self.cfg)
         super().__init__(self.cfg, sim_params, physics_engine, sim_device, headless)
@@ -901,19 +901,19 @@ class LeggedRobot(BaseTask):
         # draw height lines
         self.gym.clear_lines(self.viewer)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
-        if not self.terrain.cfg.measure_heights:
-            return
-        sphere_geom = gymutil.WireframeSphereGeometry(0.02, 4, 4, None, color=(1, 1, 0))
-        for i in range(self.num_envs):
-            base_pos = (self.root_states[i, :3]).cpu().numpy()
-            heights = self.measured_heights[i].cpu().numpy()
-            height_points = quat_apply_yaw(self.base_quat[i].repeat(heights.shape[0]), self.height_points[i]).cpu().numpy()
-            for j in range(heights.shape[0]):
-                x = height_points[j, 0] + base_pos[0]
-                y = height_points[j, 1] + base_pos[1]
-                z = heights[j]
-                sphere_pose = gymapi.Transform(gymapi.Vec3(x, y, z), r=None)
-                gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], sphere_pose) 
+        # if not self.terrain.cfg.measure_heights:
+        #     return
+        # sphere_geom = gymutil.WireframeSphereGeometry(0.02, 4, 4, None, color=(1, 1, 0))
+        # for i in range(self.num_envs):
+        #     base_pos = (self.root_states[i, :3]).cpu().numpy()
+        #     heights = self.measured_heights[i].cpu().numpy()
+        #     height_points = quat_apply_yaw(self.base_quat[i].repeat(heights.shape[0]), self.height_points[i]).cpu().numpy()
+        #     for j in range(heights.shape[0]):
+        #         x = height_points[j, 0] + base_pos[0]
+        #         y = height_points[j, 1] + base_pos[1]
+        #         z = heights[j]
+        #         sphere_pose = gymapi.Transform(gymapi.Vec3(x, y, z), r=None)
+        #         gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], sphere_pose) 
 
     def _init_height_points(self):
         """ Returns points at which the height measurments are sampled (in base frame)

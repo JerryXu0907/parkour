@@ -227,7 +227,7 @@ def parkour_gap_terrain(terrain,
 
     # terrain.height_field_raw[last_dis_x:dis_x, :mid_y+rand_y-half_valid_width] = gap_depth
     # terrain.height_field_raw[last_dis_x:dis_x, mid_y+rand_y+half_valid_width:] = gap_depth
-    goals[0] = [dis_x-rand_x//2, mid_y, 0]# + rand_y]    
+    goals[0] = [terrain.width - gap_size, mid_y, 0]# + rand_y]    
     terrain.goals = goals * terrain.horizontal_scale
     
     # terrain.height_field_raw[:, :] = 0
