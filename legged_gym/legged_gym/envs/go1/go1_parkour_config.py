@@ -160,8 +160,8 @@ class Go1ParkourCfg(LeggedRobotCfg):
         num_rows= 10 # number of terrain rows (levels)  # spreaded is benifitiall !
         num_cols = 40 # number of terrain cols (types)
         
-        # goal_vec_ranges = [[0., 0.], [0., 0.], [-0.5, 0.5]]
-        goal_vec_ranges = [[0., 0.], [0., 0.], [0., 0.]]
+        goal_vec_ranges = [[0., 0.], [0., 0.], [-0.5, 0.5]]
+        # goal_vec_ranges = [[0., 0.], [0., 0.], [0., 0.]]
         # trimesh only:
         slope_treshold = 1.5# slopes above this threshold will be corrected to vertical surfaces
         origin_zero_z = True
