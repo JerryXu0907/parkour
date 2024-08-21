@@ -269,7 +269,7 @@ class Go1ParkourCfg(LeggedRobotCfg):
             # tracking_goal_vel = 1.5
             # tracking_lin_vel = 3.0
             tracking_yaw = 0.5
-            # lin_pos_x = 10.0
+            lin_pos_x = 10.0
             # # regularization rewards
             # lin_vel_z = -1.0
             # ang_vel_xy = -0.05
