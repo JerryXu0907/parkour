@@ -765,7 +765,7 @@ class LeggedRobotParkour(LeggedRobot):
         return torch.sqrt(lin_vel_error)
 
     def _reward_tracking_world_vel(self):
-        world_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.root_states[:, 7:9]), dim= 1)
+        world_vel_error = torch.square(1.5 - self.root_states[:, 7]) + torch.square(self.root_states[:, 8])
         return torch.exp(-world_vel_error/self.cfg.rewards.tracking_sigma)
 
     def _reward_legs_energy(self):

@@ -265,42 +265,34 @@ class Go1ParkourCfg(LeggedRobotCfg):
         
     class rewards:
         class scales:
-            # tracking rewards
-            # tracking_goal_vel = 1.5
-            # tracking_lin_vel = 3.0
             tracking_yaw = 0.5
-            lin_pos_x = 10.0
-            lin_vel_x = 3.0
-            # # regularization rewards
-            # lin_vel_z = -1.0
-            # ang_vel_xy = -0.05
-            # orientation = -1.
-            # dof_acc = -2.5e-7
-            # collision = -10.
-            # action_rate = -0.1
-            # delta_torques = -1.0e-7
-            # torques = -0.00001
-            # hip_pos = -0.5
-            # dof_error = -0.04
-            # feet_stumble = -1
-            # feet_edge = -1
             tracking_ang_vel = 0.05
-            world_vel_l2norm = -1.
+            tracking_world_vel = 10.
+            # world_vel_l2norm = -2.
+            # alive = 3.
             legs_energy_substeps = -2e-5
-            legs_energy = -0.
-            alive = 2.
             # penalty for hardware safety
-            exceed_dof_pos_limits = -1e-1
-            exceed_torque_limits_i = -2e-1
-        soft_dof_pos_limit = 0.9
+            exceed_dof_pos_limits = -8e-1
+            exceed_torque_limits_l1norm = -8e-1
+            # penalty for walking gait, probably no need
+            lin_vel_z = -1.
+            orientation = -4.
+            dof_acc = -2.5e-7
+            collision = -10.
+            action_rate = -0.05
+            delta_torques = -1e-7
+            torques = -1.e-5
+            # hip_pos = -0.4
+            dof_error = -0.04
+        soft_dof_pos_limit = 0.8
         base_height_target = 0.25
         only_positive_rewards = True # if true negative total rewards are clipped at zero (avoids early termination problems)
-        tracking_sigma = 0.2 # tracking reward = exp(-error^2/sigma)
+        tracking_sigma = 0.25 # tracking reward = exp(-error^2/sigma)
         # soft_dof_pos_limit = 1. # percentage of urdf limits, values above this limit are penalized
         soft_dof_vel_limit = 1
         soft_torque_limit = 0.4
         # base_height_target = 1.
-        max_contact_force = 40. # forces above this value are penalized
+        max_contact_force = 200. # forces above this value are penalized
     # viewer camera:
     class viewer:
         ref_env = 0
@@ -353,7 +345,7 @@ class Go1ParkourCfgPPO(BaseConfig):
         rnn_hidden_size = 512
         rnn_num_layers = 1
 
-        tanh_encoder_output = True #False
+        tanh_encoder_output = False#True #False
     
     class algorithm:
         # training params
@@ -363,7 +355,7 @@ class Go1ParkourCfgPPO(BaseConfig):
         entropy_coef = 0.01
         num_learning_epochs = 5
         num_mini_batches = 4 # mini batch size = num_envs*nsteps / nminibatches
-        learning_rate = 2.e-4 #5.e-4
+        learning_rate = 1.e-3 #5.e-4
         schedule = 'adaptive' # could be adaptive, fixed
         gamma = 0.99
         lam = 0.95
