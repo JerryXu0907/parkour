@@ -53,6 +53,32 @@ TODO:
         
 '''
 
+'''
+__init__                    checked 
+step                        checked
+_update_goals               checked
+post_physics_step           checked
+check_termination           checked
+reset_idx                   checked
+create_sim                  checked
+set_camera                  no need
+_process_rigid_shape_props  checked
+_process_dof_props          checked
+_process_rigid_body_props   checked
+_post_physics_step_callback checked
+_resample_commands          no need
+_compute_torques            checked
+_reset_dofs                 checked
+_reset_root_states          checked
+_push_robots                no need
+_update_terrain_curriculum  no need
+_init_buffers
+_create_envs                checked
+_get_env_origins            checked
+_init_height_points         Note: extreme_parkour added noise in height measurement
+_get_heights                checked
+'''
+
 def euler_from_quaternion(quat_angle):
         """
         Convert a quaternion into euler angles (roll, pitch, yaw)
@@ -85,12 +111,6 @@ class LeggedRobotParkour(LeggedRobot):
         self._prepare_termination_function()
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
         self.post_physics_step()
-
-    def step(self, actions, commands=None):
-        if commands is not None:
-            self.commands = commands
-        super().step(actions)
-        return self.obs_buf, self.privileged_obs_buf, self.rew_buf, self.reset_buf, self.extras
     
     def pre_physics_step(self, actions):
         self.volume_sample_points_refreshed = False
@@ -264,37 +284,14 @@ class LeggedRobotParkour(LeggedRobot):
         self._reset_dofs(env_ids)           # dof states no need to change, or we can add some initial velocities to the dofs (limbs)
         self._reset_root_states(env_ids)    # this is the part for changing the init root_states
         self._resample_commands(env_ids)
+
+        # TODO: might have some problems regarding this
+        self.gym.simulate(self.sim)
+        self.gym.fetch_results(self.sim, True)
+        self.gym.refresh_rigid_body_state_tensor(self.sim)
+
         self._reset_buffers(env_ids)
         self._reset_goals(env_ids)
-    
-    # ---------CallBacks-------------
-    def _post_physics_step_callback(self):
-        super()._post_physics_step_callback()
-
-        self.max_power_per_timestep = torch.maximum(
-            self.max_power_per_timestep,
-            torch.max(torch.sum(self.substep_torques * self.substep_dof_vel, dim= -1), dim= -1)[0],
-        )
-
-        if hasattr(self, "actions_history_buffer"):
-            resampling_time = getattr(self.cfg.control, "action_delay_resampling_time", self.dt)
-            resample_env_ids = (self.episode_length_buf % int(resampling_time / self.dt) == 0).nonzero(as_tuple= False).flatten()
-            if len(resample_env_ids) > 0:
-                self._resample_action_delay(resample_env_ids)
-
-        if hasattr(self, "proprioception_buffer"):
-            resampling_time = getattr(self.cfg.sensor.proprioception, "latency_resampling_time", self.dt)
-            resample_env_ids = (self.episode_length_buf % int(resampling_time / self.dt) == 0).nonzero(as_tuple= False).flatten()
-            if len(resample_env_ids) > 0:
-                self._resample_proprioception_latency(resample_env_ids)
-        
-        if hasattr(self, "forward_depth_buffer"):
-            resampling_time = getattr(self.cfg.sensor.forward_camera, "latency_resampling_time", self.dt)
-            resample_env_ids = (self.episode_length_buf % int(resampling_time / self.dt) == 0).nonzero(as_tuple= False).flatten()
-            if len(resample_env_ids) > 0:
-                self._resample_forward_camera_latency(resample_env_ids)
-
-        self.torque_exceed_count_envstep[(torch.abs(self.substep_torques) > self.torque_limits).any(dim= 1).any(dim= 1)] += 1
 
     # -------------------------------
     def _init_buffers(self):
@@ -447,12 +444,12 @@ class LeggedRobotParkour(LeggedRobot):
         next_flag = self.reach_goal_timer > self.cfg.env.reach_goal_delay / self.dt
         self.reach_goal_timer[next_flag] = 0
 
-        self.reached_goal_ids = torch.norm(self.root_states[:, :3] - self.env_goals, dim=1) < self.cfg.env.next_goal_threshold
-        self.reach_goal_timer[self.reached_goal_ids] += 1
-
         ground_goals = torch.abs(self.env_goals[:, -1]) < 0.05
         self.target_pos_rel = self.env_goals - self.root_states[:, :3]
         self.target_pos_rel[ground_goals, -1] = 0.
+
+        self.reached_goal_ids = torch.norm(self.target_pos_rel, dim=1) < self.cfg.env.next_goal_threshold
+        self.reach_goal_timer[self.reached_goal_ids] += 1
         # self.target_pos_rel = quat_rotate_inverse(self.base_quat, self.target_pos_rel)
         # print(self.target_pos_rel)
         # x = input()
@@ -511,28 +508,21 @@ class LeggedRobotParkour(LeggedRobot):
         return noise_vec
 
     def _compute_torques(self, actions):    
-        if not hasattr(self.cfg.control, "motor_clip_torque"):
-            if hasattr(self, "motor_strength"):
-                actions = self.motor_strength * actions
-            return super()._compute_torques(actions)
+        actions_scaled = actions * self.cfg.control.action_scale
+        control_type = self.cfg.control.control_type
+        if control_type=="P":
+            if not self.cfg.domain_rand.randomize_motor:  # TODO add strength to gain directly
+                torques = self.p_gains*(actions_scaled + self.default_dof_pos - self.dof_pos) - self.d_gains*self.dof_vel
+            else:
+                torques = self.motor_strength[0] * self.p_gains*(actions_scaled + self.default_dof_pos - self.dof_pos) - self.motor_strength[1] * self.d_gains*self.dof_vel
+                
+        elif control_type=="V":
+            torques = self.p_gains*(actions_scaled - self.dof_vel) - self.d_gains*(self.dof_vel - self.last_dof_vel)/self.sim_params.dt
+        elif control_type=="T":
+            torques = actions_scaled
         else:
-            if hasattr(self, "motor_strength"):
-                actions_scaled_torque_clipped = self.motor_strength * self.actions_scaled_torque_clipped
-            else:
-                actions_scaled_torque_clipped = self.actions_scaled_torque_clipped
-            control_type = self.cfg.control.control_type
-            if control_type == "P":
-                torques = self.p_gains * (actions_scaled_torque_clipped + self.default_dof_pos - self.dof_pos) \
-                    - self.d_gains * self.dof_vel
-            else:
-                raise NotImplementedError
-            if self.cfg.control.motor_clip_torque:
-                torques = torch.clip(
-                    torques,
-                    -self.torque_limits * self.cfg.control.motor_clip_torque,
-                    self.torque_limits * self.cfg.control.motor_clip_torque,
-                )
-            return torques
+            raise NameError(f"Unknown controller type: {control_type}")
+        return torch.clip(torques, -self.torque_limits, self.torque_limits)
     
     # ---------- Setting Goals ---------
     def _init_goals(self):

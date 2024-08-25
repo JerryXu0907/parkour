@@ -93,8 +93,8 @@ class LeggedRobot(BaseTask):
             self.torques = self._compute_torques(self.actions).view(self.torques.shape)
             self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(self.torques))
             self.gym.simulate(self.sim)
-            if self.device == 'cpu':
-                self.gym.fetch_results(self.sim, True)
+            # if self.device == 'cpu':
+            self.gym.fetch_results(self.sim, True)
             self.gym.refresh_dof_state_tensor(self.sim)
             self.post_decimation_step(dec_i)
         self.post_physics_step()
@@ -394,7 +394,7 @@ class LeggedRobot(BaseTask):
                 device=self.device,
             )
         else:
-            self.dof_pos[env_ids] = self.default_dof_pos
+            self.dof_pos[env_ids] = self.default_dof_pos + torch_rand_float(0., 0.9, (len(env_ids), self.num_dof), device=self.device)
         # self.dof_vel[env_ids] = 0. # history init method
         # dof_vel_range = getattr(self.cfg.domain_rand, "init_dof_vel_range", [-3., 3.])
         # self.dof_vel[env_ids] = torch.rand_like(self.dof_vel[env_ids]) * abs(dof_vel_range[1] - dof_vel_range[0]) + min(dof_vel_range)
@@ -420,8 +420,6 @@ class LeggedRobot(BaseTask):
             if hasattr(self.cfg.domain_rand, "init_base_pos_range"):
                 self.root_states[env_ids, 0:1] += torch_rand_float(*self.cfg.domain_rand.init_base_pos_range["x"], (len(env_ids), 1), device=self.device)
                 self.root_states[env_ids, 1:2] += torch_rand_float(*self.cfg.domain_rand.init_base_pos_range["y"], (len(env_ids), 1), device=self.device)
-            else:
-                self.root_states[env_ids, :2] += torch_rand_float(-1., 1., (len(env_ids), 2), device=self.device) # xy position within 1m of the center
         else:
             self.root_states[env_ids] = self.base_init_state
             self.root_states[env_ids, :3] += self.env_origins[env_ids]
@@ -442,52 +440,53 @@ class LeggedRobot(BaseTask):
             self.root_states[env_ids, 3:7] = base_quat
         # base velocities
 
-        if getattr(self.cfg.domain_rand, "init_base_vel_range", None) is None:
-            base_vel_range = (-0.5, 0.5)
-        else:
-            base_vel_range = self.cfg.domain_rand.init_base_vel_range
+        # if getattr(self.cfg.domain_rand, "init_base_vel_range", None) is None:
+        #     base_vel_range = (-0.5, 0.5)
+        # else:
+        #     base_vel_range = self.cfg.domain_rand.init_base_vel_range
 
-        # debug use for training
-        base_vel_range = (0, 0)
-        if isinstance(base_vel_range, (tuple, list)):
-            self.root_states[env_ids, 7:13] = torch_rand_float(
-                *base_vel_range,
-                (len(env_ids), 6),
-                device=self.device,
-            ) # [7:10]: lin vel, [10:13]: ang vel
-        elif isinstance(base_vel_range, dict):
-            self.root_states[env_ids, 7:8] = torch_rand_float(
-                *base_vel_range["x"],
-                (len(env_ids), 1),
-                device=self.device,
-            )
-            self.root_states[env_ids, 8:9] = torch_rand_float(
-                *base_vel_range["y"],
-                (len(env_ids), 1),
-                device=self.device,
-            )
-            self.root_states[env_ids, 9:10] = torch_rand_float(
-                *base_vel_range["z"],
-                (len(env_ids), 1),
-                device=self.device,
-            )
-            self.root_states[env_ids, 10:11] = torch_rand_float(
-                *base_vel_range["roll"],
-                (len(env_ids), 1),
-                device=self.device,
-            )
-            self.root_states[env_ids, 11:12] = torch_rand_float(
-                *base_vel_range["pitch"],
-                (len(env_ids), 1),
-                device=self.device,
-            )
-            self.root_states[env_ids, 12:13] = torch_rand_float(
-                *base_vel_range["yaw"],
-                (len(env_ids), 1),
-                device=self.device,
-            )
-        else:
-            raise NameError(f"Unknown base_vel_range type: {type(base_vel_range)}")
+        # # debug use for training
+        # base_vel_range = (0, 0)
+
+        # if isinstance(base_vel_range, (tuple, list)):
+        #     self.root_states[env_ids, 7:13] = torch_rand_float(
+        #         *base_vel_range,
+        #         (len(env_ids), 6),
+        #         device=self.device,
+        #     ) # [7:10]: lin vel, [10:13]: ang vel
+        # elif isinstance(base_vel_range, dict):
+        #     self.root_states[env_ids, 7:8] = torch_rand_float(
+        #         *base_vel_range["x"],
+        #         (len(env_ids), 1),
+        #         device=self.device,
+        #     )
+        #     self.root_states[env_ids, 8:9] = torch_rand_float(
+        #         *base_vel_range["y"],
+        #         (len(env_ids), 1),
+        #         device=self.device,
+        #     )
+        #     self.root_states[env_ids, 9:10] = torch_rand_float(
+        #         *base_vel_range["z"],
+        #         (len(env_ids), 1),
+        #         device=self.device,
+        #     )
+        #     self.root_states[env_ids, 10:11] = torch_rand_float(
+        #         *base_vel_range["roll"],
+        #         (len(env_ids), 1),
+        #         device=self.device,
+        #     )
+        #     self.root_states[env_ids, 11:12] = torch_rand_float(
+        #         *base_vel_range["pitch"],
+        #         (len(env_ids), 1),
+        #         device=self.device,
+        #     )
+        #     self.root_states[env_ids, 12:13] = torch_rand_float(
+        #         *base_vel_range["yaw"],
+        #         (len(env_ids), 1),
+        #         device=self.device,
+        #     )
+        # else:
+        #     raise NameError(f"Unknown base_vel_range type: {type(base_vel_range)}")
         
         # Each env has multiple actors. So the actor index is not the same as env_id. But robot actor is always the first.
         actor_idx = env_ids * self.all_root_states.shape[0] / self.num_envs
