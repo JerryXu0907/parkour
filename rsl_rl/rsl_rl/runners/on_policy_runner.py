@@ -62,17 +62,18 @@ class OnPolicyRunnerVel:
             self.policy_cfg,
         ).to(self.device)
 
-        velocity_planner = nn.Sequential(
-            nn.Linear(env.num_obs-3, 256),
-            nn.ELU(),
-            nn.Linear(256, 128),
-            nn.ELU(),
-            nn.Linear(128, 1)
-        ).to(self.device)
+        # velocity_planner = nn.Sequential(
+        #     nn.Linear(env.num_obs-3, 256),
+        #     nn.ELU(),
+        #     nn.Linear(256, 128),
+        #     nn.ELU(),
+        #     nn.Linear(128, 1)
+        # ).to(self.device)
 
         alg_class = getattr(algorithms, self.cfg["algorithm_class_name"]) # PPO
 
-        self.alg: algorithms.PPO = alg_class(actor_critic, velocity_planner, device=self.device, **self.alg_cfg)
+        # self.alg: algorithms.PPO = alg_class(actor_critic, velocity_planner, device=self.device, **self.alg_cfg)
+        self.alg = alg_class(actor_critic, device=self.device, **self.alg_cfg)
         
         self.num_steps_per_env = self.cfg["num_steps_per_env"]
         self.save_interval = self.cfg["save_interval"]

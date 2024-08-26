@@ -73,16 +73,13 @@ class ActorCriticRecurrent(ActorCritic):
         self.memory_a.reset(dones)
         self.memory_c.reset(dones)
 
-    def act(self, observations, masks=None, hidden_states=None, velocity=None):
-        if velocity is not None:
-            # print(velocity.squeeze())
-            observations[..., 9] = velocity.squeeze(-1)
+    def act(self, observations, masks=None, hidden_states=None):
         # vel_obs = torch.cat([observations[:, :9], observations[:, 12:]], dim=1)
         # velocity = self.velocity_planner(vel_obs)
         # velocity = torch.clip(velocity, self.lin_vel_x[0], self.lin_vel_x[1])
         # observations[:, 9] = velocity
         input_a = self.memory_a(observations, masks, hidden_states)
-        return super().act(input_a.squeeze(0)), velocity.squeeze().detach()
+        return super().act(input_a.squeeze(0))
 
     def act_inference(self, observations, velocity=None):
         if velocity is not None:

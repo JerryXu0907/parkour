@@ -42,7 +42,7 @@ class PPOVel:
     # actor_critic: ActorCritic | ActorCriticRMA
     def __init__(self,
                  actor_critic,
-                 velocity_planner,
+                #  velocity_planner,
                  num_learning_epochs=1,
                  num_mini_batches=1,
                  clip_param=0.2,
@@ -74,11 +74,11 @@ class PPOVel:
         self.optimizer = getattr(optim, optimizer_class_name)(self.actor_critic.parameters(), lr=learning_rate)
         self.transition = RolloutStorage.Transition()
 
-        # Velocity Planner
-        self.velocity_planner = velocity_planner
-        self.velocity_optimizer = getattr(optim, optimizer_class_name)(self.velocity_planner.parameters(), lr=learning_rate)
-        self.lin_vel_x = kwargs.get('lin_vel_x', None)
-        self.command_scale = kwargs.get('command_scale', 2.0)
+        # # Velocity Planner
+        # self.velocity_planner = velocity_planner
+        # self.velocity_optimizer = getattr(optim, optimizer_class_name)(self.velocity_planner.parameters(), lr=learning_rate)
+        # self.lin_vel_x = kwargs.get('lin_vel_x', None)
+        # self.command_scale = kwargs.get('command_scale', 2.0)
 
         # PPO parameters
         self.clip_param = clip_param
@@ -110,20 +110,30 @@ class PPOVel:
         if self.actor_critic.is_recurrent:
             self.transition.hidden_states = self.actor_critic.get_hidden_states()
         # Compute the actions and values
-        vel_obs = torch.cat([obs[..., :9], obs[..., 12:]], dim=-1)
-        velocity = self.velocity_planner(vel_obs)
+        # vel_obs = torch.cat([obs[..., :9], obs[..., 12:]], dim=-1)
+        # velocity = self.velocity_planner(vel_obs)
         # if self.lin_vel_x is not None:
         #     velocity = torch.clip(velocity, self.lin_vel_x[0], self.lin_vel_x[1])
-        self.transition.actions = self.actor_critic.act(obs, velocity=velocity * self.command_scale)[0].detach()
+        # self.transition.actions = self.actor_critic.act(obs, velocity=velocity * self.command_scale)[0].detach()
+        # # critic_obs[..., 9] = velocity.squeeze(-1) * self.command_scale
+        # self.transition.values = self.actor_critic.evaluate(vel_obs).detach()
+        # self.transition.actions_log_prob = self.actor_critic.get_actions_log_prob(self.transition.actions).detach()
+        # self.transition.action_mean = self.actor_critic.action_mean.detach()
+        # self.transition.action_sigma = self.actor_critic.action_std.detach()
+        # # need to record obs and critic_obs before env.step()
+        # self.transition.observations = vel_obs
+        # self.transition.critic_observations = vel_obs
+        # return self.transition.actions, velocity.squeeze().detach()
+        self.transition.actions = self.actor_critic.act(obs).detach()
         # critic_obs[..., 9] = velocity.squeeze(-1) * self.command_scale
-        self.transition.values = self.actor_critic.evaluate(vel_obs).detach()
+        self.transition.values = self.actor_critic.evaluate(obs).detach()
         self.transition.actions_log_prob = self.actor_critic.get_actions_log_prob(self.transition.actions).detach()
         self.transition.action_mean = self.actor_critic.action_mean.detach()
         self.transition.action_sigma = self.actor_critic.action_std.detach()
         # need to record obs and critic_obs before env.step()
-        self.transition.observations = vel_obs
-        self.transition.critic_observations = vel_obs
-        return self.transition.actions, velocity.squeeze().detach()
+        self.transition.observations = obs
+        self.transition.critic_observations = obs
+        return self.transition.actions
     
     def process_env_step(self, rewards, dones, infos):
         self.transition.rewards = rewards.clone()
@@ -164,11 +174,11 @@ class PPOVel:
 
                 # Gradient step
                 self.optimizer.zero_grad()
-                self.velocity_optimizer.zero_grad()
+                # self.velocity_optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.optimizer.step()
-                self.velocity_optimizer.step()
+                # self.velocity_optimizer.step()
 
         num_updates = self.num_learning_epochs * self.num_mini_batches
         for k in mean_losses.keys():
@@ -186,12 +196,12 @@ class PPOVel:
 
         # vel_obs = torch.cat([obs[..., :9], obs[..., 12:]], dim=-1)
 
-        velocity = self.velocity_planner(obs)
-        zeros = torch.zeros_like(velocity, requires_grad=False)
-        obs_with_cmd = torch.cat([obs[..., :9], velocity, zeros, zeros, obs[..., 9:]], dim=-1)
+        # velocity = self.velocity_planner(obs)
+        # zeros = torch.zeros_like(velocity, requires_grad=False)
+        # obs_with_cmd = torch.cat([obs[..., :9], velocity, zeros, zeros, obs[..., 9:]], dim=-1)
         # if self.lin_vel_x is not None:
         #     velocity = torch.clip(velocity, self.lin_vel_x[0], self.lin_vel_x[1])
-        self.actor_critic.act(obs_with_cmd, masks=minibatch.masks, hidden_states=minibatch.hid_states[0], velocity=velocity * self.command_scale)
+        self.actor_critic.act(obs, masks=minibatch.masks, hidden_states=minibatch.hid_states[0])
         actions_log_prob_batch = self.actor_critic.get_actions_log_prob(minibatch.actions)
         value_batch = self.actor_critic.evaluate(obs, masks=minibatch.masks, hidden_states=minibatch.hid_states[1])
         mu_batch = self.actor_critic.action_mean
@@ -234,17 +244,17 @@ class PPOVel:
         else:
             value_loss = (minibatch.returns - value_batch).pow(2).mean()
         
-        # Velocity loss
-        if current_learning_iteration is None:
-            vel_loss = 0
-        else:
-            vel_loss = torch.square(velocity-2).mean() * np.exp(-0.001 * current_learning_iteration + 12)
-            vel_loss += torch.square(torch.clamp_max(velocity, 1.) - 1).mean()
+        # # Velocity loss
+        # if current_learning_iteration is None:
+        #     vel_loss = 0
+        # else:
+        #     vel_loss = torch.square(velocity-2).mean() * np.exp(-0.001 * current_learning_iteration + 12)
+        #     vel_loss += torch.square(torch.clamp_max(velocity, 1.) - 1).mean()
 
         return_ = dict(
             surrogate_loss= surrogate_loss,
             value_loss= value_loss,
-            vel_loss = vel_loss
+            # vel_loss = vel_loss
         )
         if entropy_batch is not None:
             return_["entropy"] = - entropy_batch.mean()
