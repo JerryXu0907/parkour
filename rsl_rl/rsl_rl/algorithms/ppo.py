@@ -100,11 +100,11 @@ class PPOVel:
 
     def test_mode(self):
         self.actor_critic.test()
-        self.velocity_planner.eval()
+        # self.velocity_planner.eval()
     
     def train_mode(self):
         self.actor_critic.train()
-        self.velocity_planner.train()
+        # self.velocity_planner.train()
 
     def act(self, obs, critic_obs):
         if self.actor_critic.is_recurrent:
@@ -148,7 +148,7 @@ class PPOVel:
         self.actor_critic.reset(dones)
     
     def compute_returns(self, last_critic_obs):
-        last_critic_obs = torch.cat([last_critic_obs[..., :9], last_critic_obs[..., 12:]], dim=-1)
+        # last_critic_obs = torch.cat([last_critic_obs[..., :9], last_critic_obs[..., 12:]], dim=-1)
         last_values= self.actor_critic.evaluate(last_critic_obs).detach()
         self.storage.compute_returns(last_values, self.gamma, self.lam)
 

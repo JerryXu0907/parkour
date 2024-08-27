@@ -40,6 +40,7 @@ import torch.nn as nn
 import rsl_rl.algorithms as algorithms
 import rsl_rl.modules as modules
 from rsl_rl.env import VecEnv
+import wandb
 
 
 class OnPolicyRunnerVel:
@@ -79,11 +80,11 @@ class OnPolicyRunnerVel:
         self.save_interval = self.cfg["save_interval"]
 
         # init storage and model
-        self.alg.init_storage(self.env.num_envs, self.num_steps_per_env, [self.env.num_obs - 3], [self.env.num_privileged_obs], [self.env.num_actions])
+        self.alg.init_storage(self.env.num_envs, self.num_steps_per_env, [self.env.num_obs], [self.env.num_privileged_obs], [self.env.num_actions])
 
         # Log
         self.log_dir = log_dir
-        self.writer = None
+        # self.writer = None
         self.tot_timesteps = 0
         self.tot_time = 0
         self.current_learning_iteration = 0
@@ -93,8 +94,8 @@ class OnPolicyRunnerVel:
     
     def learn(self, num_learning_iterations, init_at_random_ep_len=False):
         # initialize writer
-        if self.log_dir is not None and self.writer is None:
-            self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
+        # if self.log_dir is not None and self.writer is None:
+        #     self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
         if init_at_random_ep_len:
             self.env.episode_length_buf = torch.randint_like(self.env.episode_length_buf, high=int(self.env.max_episode_length))
         obs = self.env.get_observations()
@@ -152,8 +153,8 @@ class OnPolicyRunnerVel:
         self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(self.current_learning_iteration)))
 
     def rollout_step(self, obs, critic_obs):
-        actions, velocity = self.alg.act(obs, critic_obs)
-        obs, privileged_obs, rewards, dones, infos = self.env.step(actions, velocity)
+        actions= self.alg.act(obs, critic_obs)
+        obs, privileged_obs, rewards, dones, infos = self.env.step(actions)
         critic_obs = privileged_obs if privileged_obs is not None else obs
         obs, critic_obs, rewards, dones = obs.to(self.device), critic_obs.to(self.device), rewards.to(self.device), dones.to(self.device)
         self.alg.process_env_step(rewards, dones, infos)
@@ -163,11 +164,13 @@ class OnPolicyRunnerVel:
         self.tot_timesteps += self.num_steps_per_env * self.env.num_envs
         self.tot_time += locs['collection_time'] + locs['learn_time']
         iteration_time = locs['collection_time'] + locs['learn_time']
-
+        wandb_dict = {}
         ep_string = f''
         if locs['ep_infos']:
             for key in locs['ep_infos'][0]:
                 infotensor = torch.tensor([], device=self.device)
+                if "frame" in key:
+                    continue
                 for ep_info in locs['ep_infos']:
                     # handle scalar and zero dimensional tensor infos
                     if not isinstance(ep_info[key], torch.Tensor):
@@ -176,29 +179,49 @@ class OnPolicyRunnerVel:
                         ep_info[key] = ep_info[key].unsqueeze(0)
                     infotensor = torch.cat((infotensor, ep_info[key].to(self.device)))
                 value = torch.mean(infotensor)
-                self.writer.add_scalar('Episode/' + key, value, self.current_learning_iteration)
+                wandb_dict['Episode_rew/' + key] = value
+                # self.writer.add_scalar('Episode/' + key, value, self.current_learning_iteration)
                 ep_string += f"""{f'Mean episode {key}:':>{pad}} {value:.4f}\n"""
         mean_std = self.alg.actor_critic.action_std.mean()
         fps = int(self.num_steps_per_env * self.env.num_envs / (locs['collection_time'] + locs['learn_time']))
 
         for k, v in locs["losses"].items():
-            self.writer.add_scalar("Loss/" + k, v.item(), self.current_learning_iteration)
+            wandb_dict["Loss/" + k] = v.item()
         for k, v in locs["stats"].items():
-            self.writer.add_scalar("Train/" + k, v.item(), self.current_learning_iteration)
-        
-        self.writer.add_scalar('Loss/learning_rate', self.alg.learning_rate, self.current_learning_iteration)
-        self.writer.add_scalar('Policy/mean_noise_std', mean_std.item(), self.current_learning_iteration)
-        self.writer.add_scalar('Perf/total_fps', fps, self.current_learning_iteration)
-        self.writer.add_scalar('Perf/collection time', locs['collection_time'], self.current_learning_iteration)
-        self.writer.add_scalar('Perf/learning_time', locs['learn_time'], self.current_learning_iteration)
-        self.writer.add_scalar('Perf/gpu_allocated', torch.cuda.memory_allocated(self.device) / 1024 ** 3, self.current_learning_iteration)
-        self.writer.add_scalar('Perf/gpu_occupied', torch.cuda.mem_get_info(self.device)[1] / 1024 ** 3, self.current_learning_iteration)
-        self.writer.add_scalar('Train/mean_reward_each_timestep', statistics.mean(locs['rframebuffer']), self.current_learning_iteration)
+            wandb_dict["Train/" + k] = v.item()
+
+        # wandb_dict['Loss/value_function'] = ['mean_value_loss']
+        # wandb_dict['Loss/entropy_coef'] = locs['entropy_coef']
+        # wandb_dict['Loss/learning_rate'] = self.alg.learning_rate
+        # wandb_dict['Loss/discriminator'] = locs['mean_disc_loss']
+        # wandb_dict['Loss/discriminator_accuracy'] = locs['mean_disc_acc']
+
+        wandb_dict['Policy/mean_noise_std'] = mean_std.item()
+        wandb_dict['Perf/total_fps'] = fps
+        wandb_dict['Perf/collection time'] = locs['collection_time']
+        wandb_dict['Perf/learning_time'] = locs['learn_time']
         if len(locs['rewbuffer']) > 0:
-            self.writer.add_scalar('Train/mean_reward', statistics.mean(locs['rewbuffer']), self.current_learning_iteration)
-            self.writer.add_scalar('Train/mean_episode_length', statistics.mean(locs['lenbuffer']), self.current_learning_iteration)
-            self.writer.add_scalar('Train/mean_reward/time', statistics.mean(locs['rewbuffer']), self.tot_time)
-            self.writer.add_scalar('Train/mean_episode_length/time', statistics.mean(locs['lenbuffer']), self.tot_time)
+            wandb_dict['Train/mean_reward'] = statistics.mean(locs['rewbuffer'])
+            wandb_dict['Train/mean_episode_length'] = statistics.mean(locs['lenbuffer'])
+
+        wandb.log(wandb_dict, step=self.current_learning_iteration)
+
+        
+        
+        
+        # self.writer.add_scalar('Loss/learning_rate', self.alg.learning_rate, self.current_learning_iteration)
+        # self.writer.add_scalar('Policy/mean_noise_std', mean_std.item(), self.current_learning_iteration)
+        # self.writer.add_scalar('Perf/total_fps', fps, self.current_learning_iteration)
+        # self.writer.add_scalar('Perf/collection time', locs['collection_time'], self.current_learning_iteration)
+        # self.writer.add_scalar('Perf/learning_time', locs['learn_time'], self.current_learning_iteration)
+        # self.writer.add_scalar('Perf/gpu_allocated', torch.cuda.memory_allocated(self.device) / 1024 ** 3, self.current_learning_iteration)
+        # self.writer.add_scalar('Perf/gpu_occupied', torch.cuda.mem_get_info(self.device)[1] / 1024 ** 3, self.current_learning_iteration)
+        # self.writer.add_scalar('Train/mean_reward_each_timestep', statistics.mean(locs['rframebuffer']), self.current_learning_iteration)
+        # if len(locs['rewbuffer']) > 0:
+        #     self.writer.add_scalar('Train/mean_reward', statistics.mean(locs['rewbuffer']), self.current_learning_iteration)
+        #     self.writer.add_scalar('Train/mean_episode_length', statistics.mean(locs['lenbuffer']), self.current_learning_iteration)
+        #     self.writer.add_scalar('Train/mean_reward/time', statistics.mean(locs['rewbuffer']), self.tot_time)
+        #     self.writer.add_scalar('Train/mean_episode_length/time', statistics.mean(locs['lenbuffer']), self.tot_time)
 
         str = f" \033[1m Learning iteration {self.current_learning_iteration}/{locs['tot_iter']} \033[0m "
 
@@ -213,6 +236,7 @@ class OnPolicyRunnerVel:
                           f"""{'Mean action noise std:':>{pad}} {mean_std.item():.2f}\n"""
                           f"""{'Mean reward:':>{pad}} {statistics.mean(locs['rewbuffer']):.2f}\n"""
                           f"""{'Mean episode length:':>{pad}} {statistics.mean(locs['lenbuffer']):.2f}\n"""
+                          f"""{'-' * width}\n"""
                         #   f"""{'Mean reward/step:':>{pad}} {locs['mean_reward']:.2f}\n"""
                         #   f"""{'Mean episode length/episode:':>{pad}} {locs['mean_trajectory_length']:.2f}\n"""
                         )
@@ -240,9 +264,9 @@ class OnPolicyRunnerVel:
     def save(self, path, infos=None):
         run_state_dict = {
             'model_state_dict': self.alg.actor_critic.state_dict(),
-            'velocity_planner_state_dict': self.alg.velocity_planner.state_dict(),
+            # 'velocity_planner_state_dict': self.alg.velocity_planner.state_dict(),
             'optimizer_state_dict': self.alg.optimizer.state_dict(),
-            'velocity_optimizer_state_dict': self.alg.velocity_optimizer.state_dict(),
+            # 'velocity_optimizer_state_dict': self.alg.velocity_optimizer.state_dict(),
             'iter': self.current_learning_iteration,
             'infos': infos,
         }
@@ -266,10 +290,10 @@ class OnPolicyRunnerVel:
                 new_state[k] = v
             self.alg.actor_critic.load_state_dict(new_state, strict=False)
 
-        if 'velocity_planner_state_dict' in loaded_dict:
-            self.alg.velocity_planner.load_state_dict(loaded_dict['velocity_planner_state_dict'])
-        if load_optimizer and "velocity_optimizer_state_dict" in loaded_dict:
-            self.alg.velocity_optimizer.load_state_dict(loaded_dict['velocity_optimizer_state_dict'], )
+        # if 'velocity_planner_state_dict' in loaded_dict:
+        #     self.alg.velocity_planner.load_state_dict(loaded_dict['velocity_planner_state_dict'])
+        # if load_optimizer and "velocity_optimizer_state_dict" in loaded_dict:
+        #     self.alg.velocity_optimizer.load_state_dict(loaded_dict['velocity_optimizer_state_dict'], )
         if "lr_scheduler_state_dict" in loaded_dict:
             if not hasattr(self.alg, "lr_scheduler"):
                 print("Warning: lr_scheduler_state_dict found in checkpoint but no lr_scheduler in algorithm. Ignoring.")

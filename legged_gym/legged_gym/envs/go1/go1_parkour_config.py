@@ -46,7 +46,7 @@ class Go1ParkourCfg(LeggedRobotCfg):
             "base_pose",        # explicit
             "robot_config",     # latent
             "goal",             # goal
-            "prop_history",     # history
+            # "prop_history",     # history
         ]
         n_proprio = 46
         n_scan = 132
@@ -58,7 +58,7 @@ class Go1ParkourCfg(LeggedRobotCfg):
         # n_priv_latent = 4 + 1 + 12 +12
         # n_proprio = 3 + 2 + 3 + 4 + 36 + 5
         history_len = 10
-        num_observations = n_proprio + n_scan + history_len*n_proprio + n_priv_latent + n_goal + n_priv_explicit  #n_scan + n_proprio + n_priv #187 + 47 + 5 + 12 
+        num_observations = n_proprio + n_scan + n_priv_latent + n_goal + n_priv_explicit# + history_len*n_proprio  #n_scan + n_proprio + n_priv #187 + 47 + 5 + 12 
         num_privileged_obs = None # if not None a priviledge_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise 
         num_actions = 12
         env_spacing = 3.  # not used with heightfields/trimeshes 
@@ -330,7 +330,7 @@ class Go1ParkourCfg(LeggedRobotCfg):
 
 class Go1ParkourCfgPPO(BaseConfig):
     seed = 1
-    runner_class_name = 'OnPolicyRunner'
+    runner_class_name = 'OnPolicyRunnerVel'
  
     class policy:
         init_noise_std = 1.0
@@ -341,11 +341,12 @@ class Go1ParkourCfgPPO(BaseConfig):
         priv_encoder_dims = [64, 20]
         activation = 'elu' # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
         # only for 'ActorCriticRecurrent':
-        rnn_type = 'lstm'
-        rnn_hidden_size = 512
-        rnn_num_layers = 1
-
-        tanh_encoder_output = False#True #False
+        # rnn_type = 'lstm'
+        # rnn_hidden_size = 512
+        # rnn_num_layers = 1
+        rnn_type = 'gru'
+        mu_activation = "tanh"
+        # tanh_encoder_output = False#True #False
     
     class algorithm:
         # training params
@@ -361,10 +362,11 @@ class Go1ParkourCfgPPO(BaseConfig):
         lam = 0.95
         desired_kl = 0.01
         max_grad_norm = 1.
-        # dagger params
-        dagger_update_freq = 20
-        priv_reg_coef_schedual = [0, 0.1, 2000, 3000]
-        priv_reg_coef_schedual_resume = [0, 0.1, 0, 1]
+        # # dagger params
+        # dagger_update_freq = 20
+        # priv_reg_coef_schedual = [0, 0.1, 2000, 3000]
+        # priv_reg_coef_schedual_resume = [0, 0.1, 0, 1]
+        clip_min_std = 1e-12
     
     class depth_encoder:
         if_depth = Go1ParkourCfg.depth.use_camera
@@ -383,8 +385,8 @@ class Go1ParkourCfgPPO(BaseConfig):
         num_scan = Go1ParkourCfg.env.n_scan
 
     class runner:
-        policy_class_name = 'ActorCritic'
-        algorithm_class_name = 'PPO'
+        policy_class_name = 'ActorCriticRecurrent'
+        algorithm_class_name = 'PPOVel'
         num_steps_per_env = 24 # per iteration
         max_iterations = 50000 # number of policy updates
 
