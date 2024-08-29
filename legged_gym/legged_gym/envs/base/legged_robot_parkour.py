@@ -212,6 +212,7 @@ class LeggedRobotParkour(LeggedRobot):
         self.last_root_pos[:] = self.root_states[:, :3]
         self.last_torques[:] = self.torques[:]
 
+        self.debug_viz=True
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
             self._draw_debug_vis()
             if self.cfg.depth.use_camera:
@@ -1017,6 +1018,8 @@ class LeggedRobotParkour(LeggedRobot):
                     pose = gymapi.Transform(gymapi.Vec3(pose_arrow[0], pose_arrow[1], pose_arrow[2]), r=None)
                     gymutil.draw_lines(sphere_geom_arrow, self.gym, self.viewer, self.envs[i], pose)
             sphere_geom = gymutil.WireframeSphereGeometry(0.1, 32, 32, None, color=(1, 0, 0))
-            goal = self.terrain_goals[self.terrain_levels[i], self.terrain_types[i]].cpu().numpy()
-            pose = gymapi.Transform(gymapi.Vec3(goal[0], goal[1], goal[2]), r=None)
-            gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], pose)
+
+            for t in range(10):
+                goal = self.terrain_goals[t, self.terrain_types[i]].cpu().numpy()
+                pose = gymapi.Transform(gymapi.Vec3(goal[0], goal[1], goal[2]), r=None)
+                gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], pose)
