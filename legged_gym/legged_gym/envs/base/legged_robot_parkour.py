@@ -707,7 +707,9 @@ class LeggedRobotParkour(LeggedRobot):
 
     def _termination_goal(self):
         reach_goal_cutoff = self.reached_goal_ids
+        reach_goal_x_cutoff = self.root_states[:, 0] > self.env_goals[:, 0]
         self.reset_buf |= reach_goal_cutoff
+        self.reset_buf |= reach_goal_x_cutoff
 
     # ----------Rewards-----------------
     def _reward_tracking_goal_vel(self):

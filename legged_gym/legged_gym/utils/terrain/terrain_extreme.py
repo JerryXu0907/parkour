@@ -211,7 +211,7 @@ class Terrain:
                                 horizontal_scale=self.cfg.horizontal_scale)
         
         if np.abs(goal_vec[-1]) > 0.1:
-            platform_height = parkour_step_terrain(terrain, num_stones=1, step_height=goal_vec[-1])
+            platform_height = parkour_step_terrain(terrain, num_stones=1, step_height=goal_vec[-1] * difficulty)
             platform_height = 0. if goal_vec[-1] > 0. else -goal_vec[-1]
             self.add_roughness(terrain)
         else:
