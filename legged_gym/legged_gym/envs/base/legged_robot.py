@@ -448,17 +448,17 @@ class LeggedRobot(BaseTask):
             *base_vel_range[0],
             (len(env_ids), 1),
             device=self.device,
-        ) * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
+        )# * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
         self.root_states[env_ids, 8:9] = torch_rand_float(
             *base_vel_range[1],
             (len(env_ids), 1),
             device=self.device,
-        ) * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
+        )# * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
         self.root_states[env_ids, 9:10] = torch_rand_float(
             *base_vel_range[2],
             (len(env_ids), 1),
             device=self.device,
-        ) * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
+        )# * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
         # # debug use for training
         # base_vel_range = (0, 0)
 

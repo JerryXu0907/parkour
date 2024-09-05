@@ -107,7 +107,7 @@ class LeggedRobotParkour(LeggedRobot):
     def __init__(self, cfg: LeggedRobotCfg, sim_params, physics_engine, sim_device, headless):
         self.all_obs_components = cfg.env.obs_components
         super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
-        print(self.debug_viz)
+        # print(self.debug_viz)
         self._prepare_termination_function()
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
         self.post_physics_step()
@@ -532,9 +532,9 @@ class LeggedRobotParkour(LeggedRobot):
         self.env_goals_rel = self.terrain_goals[self.terrain_levels, self.terrain_types] - self.root_states[:, :3]
         self.init_velocities = self.root_states[:, 7:10]
         self.goal_velocities = torch.zeros_like(self.init_velocities)
-        self.goal_velocities[:, 0:1] = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range[0], (self.num_envs, 1), device=self.device) * self.terrain_levels.float().unsqueeze(-1) / self.cfg.terrain.num_rows
-        self.goal_velocities[:, 1:2] = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range[1], (self.num_envs, 1), device=self.device) * self.terrain_levels.float().unsqueeze(-1) / self.cfg.terrain.num_rows
-        self.goal_velocities[:, 2:3] = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range[2], (self.num_envs, 1), device=self.device) * self.terrain_levels.float().unsqueeze(-1) / self.cfg.terrain.num_rows
+        self.goal_velocities[:, 0:1] = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range[0], (self.num_envs, 1), device=self.device)# * self.terrain_levels.float().unsqueeze(-1) / self.cfg.terrain.num_rows
+        self.goal_velocities[:, 1:2] = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range[1], (self.num_envs, 1), device=self.device)# * self.terrain_levels.float().unsqueeze(-1) / self.cfg.terrain.num_rows
+        self.goal_velocities[:, 2:3] = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range[2], (self.num_envs, 1), device=self.device)# * self.terrain_levels.float().unsqueeze(-1) / self.cfg.terrain.num_rows
         # self.goal_velocities = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range, self.env_goals.shape, device=self.device)
 
         self.mat = torch.zeros(6, 6, dtype=torch.float, device=self.device, requires_grad=False)
@@ -557,9 +557,9 @@ class LeggedRobotParkour(LeggedRobot):
         self.env_goals[env_ids] = self.terrain_goals[self.terrain_levels[env_ids], self.terrain_types[env_ids]] #- self.root_states[env_ids, :3]
         self.env_goals_rel[env_ids] = self.terrain_goals[self.terrain_levels[env_ids], self.terrain_types[env_ids]] - self.root_states[env_ids, :3]
         self.init_velocities[env_ids] = self.root_states[env_ids, 7:10]
-        self.goal_velocities[env_ids, 0:1] = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range[0], (len(env_ids), 1), device=self.device) * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
-        self.goal_velocities[env_ids, 1:2] = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range[1], (len(env_ids), 1), device=self.device) * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
-        self.goal_velocities[env_ids, 2:3] = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range[2], (len(env_ids), 1), device=self.device) * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
+        self.goal_velocities[env_ids, 0:1] = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range[0], (len(env_ids), 1), device=self.device)# * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
+        self.goal_velocities[env_ids, 1:2] = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range[1], (len(env_ids), 1), device=self.device)# * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
+        self.goal_velocities[env_ids, 2:3] = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range[2], (len(env_ids), 1), device=self.device)# * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
         # self.goal_velocities[env_ids] *=  self.terrain_levels[env_ids].float() / self.cfg.terrain.num_rows
 
         goal_mat = torch.zeros(len(env_ids), 6, 3, dtype=torch.float, device=self.device, requires_grad=False)
@@ -1057,11 +1057,18 @@ class LeggedRobotParkour(LeggedRobot):
             if not self.cfg.depth.use_camera:
                 sphere_geom_arrow = gymutil.WireframeSphereGeometry(0.02, 16, 16, None, color=(1, 0.35, 0.25))
                 pose_robot = self.root_states[i, :3].cpu().numpy()      # in world frame
+                # for j in range(5):
+                #     norm = torch.norm(self.target_pos_rel, dim=-1, keepdim=True)    # target_pos_rel is in world frame
+                #     target_vec_norm = self.target_pos_rel / (norm + 1e-5)
+                #     pose_arrow = pose_robot[:3] + 0.1*(j+3) * target_vec_norm[i, :3].cpu().numpy()
+                #     pose = gymapi.Transform(gymapi.Vec3(pose_arrow[0], pose_arrow[1], pose_arrow[2]), r=None)
+                #     gymutil.draw_lines(sphere_geom_arrow, self.gym, self.viewer, self.envs[i], pose)
                 for j in range(5):
-                    norm = torch.norm(self.target_pos_rel, dim=-1, keepdim=True)    # target_pos_rel is in world frame
-                    target_vec_norm = self.target_pos_rel / (norm + 1e-5)
-                    pose_arrow = pose_robot[:3] + 0.1*(j+3) * target_vec_norm[i, :3].cpu().numpy()
-                    pose = gymapi.Transform(gymapi.Vec3(pose_arrow[0], pose_arrow[1], pose_arrow[2]), r=None)
+                    t = j
+                    ts = torch.tensor([t**5, t**4, t**3, t**2, t**1, 1], dtype=torch.float).to(self.device).unsqueeze(0)
+                    pos = ts @ self.traj_coeff[i]
+                    pos = pos.squeeze() + self.env_origins[i]
+                    pose = gymapi.Transform(gymapi.Vec3(pos[0], pos[1], pos[2]), r=None)
                     gymutil.draw_lines(sphere_geom_arrow, self.gym, self.viewer, self.envs[i], pose)
             sphere_geom = gymutil.WireframeSphereGeometry(0.1, 32, 32, None, color=(1, 0, 0))
 

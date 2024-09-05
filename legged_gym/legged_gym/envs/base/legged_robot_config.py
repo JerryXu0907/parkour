@@ -137,7 +137,7 @@ class LeggedRobotCfg(BaseConfig):
         max_push_vel_xy = 1.
         max_push_vel_ang = 0.
         init_dof_pos_ratio_range = [0.5, 1.5]
-        init_base_vel_range = [[-0.5, 1.2], [-0.8, 0.8], [-0.4, 0]]
+        init_base_vel_range = [[0.5, 1.2], [0.2, 0.8], [-0.4, 0]]
 
     class rewards:
         class scales:
