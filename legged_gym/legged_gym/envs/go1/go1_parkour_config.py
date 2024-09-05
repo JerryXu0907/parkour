@@ -79,6 +79,7 @@ class Go1ParkourCfg(LeggedRobotCfg):
         next_goal_threshold = 0.2
         reach_goal_delay = 0.1
         num_future_goal_obs = 2
+        timer = 10.
 
     class depth:
         use_camera = False
@@ -251,7 +252,7 @@ class Go1ParkourCfg(LeggedRobotCfg):
         push_robots = True
         push_interval_s = 8
         max_push_vel_xy = 0.5
-        init_base_vel_range = [0, 0.8]
+        init_base_vel_range = [[-0.5, 1.2], [-0.8, 0.8], [-0.4, 0.4]]
         randomize_motor = True
         leg_motor_strength_range = [0.8, 1.2]
 
@@ -267,7 +268,9 @@ class Go1ParkourCfg(LeggedRobotCfg):
         class scales:
             tracking_yaw = 0.5
             tracking_ang_vel = 0.05
-            tracking_world_vel = 10.
+            tracking_world_vel = 3.
+            follow_traj_vel = 5.
+            follow_traj_pos = -1.
             # world_vel_l2norm = -2.
             # alive = 3.
             legs_energy_substeps = -2e-5
@@ -275,7 +278,7 @@ class Go1ParkourCfg(LeggedRobotCfg):
             exceed_dof_pos_limits = -8e-1
             exceed_torque_limits_l1norm = -8e-1
             # penalty for walking gait, probably no need
-            lin_vel_z = -1.
+            # lin_vel_z = -1.
             orientation = -4.
             dof_acc = -2.5e-7
             collision = -10.
