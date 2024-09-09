@@ -440,25 +440,25 @@ class LeggedRobot(BaseTask):
             self.root_states[env_ids, 3:7] = base_quat
         # base velocities
 
-        if getattr(self.cfg.domain_rand, "init_base_vel_range", None) is None:
-            base_vel_range = (-0.5, 0.5)
-        else:
-            base_vel_range = self.cfg.domain_rand.init_base_vel_range
-        self.root_states[env_ids, 7:8] = torch_rand_float(
-            *base_vel_range[0],
-            (len(env_ids), 1),
-            device=self.device,
-        )# * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
-        self.root_states[env_ids, 8:9] = torch_rand_float(
-            *base_vel_range[1],
-            (len(env_ids), 1),
-            device=self.device,
-        )# * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
-        self.root_states[env_ids, 9:10] = torch_rand_float(
-            *base_vel_range[2],
-            (len(env_ids), 1),
-            device=self.device,
-        )# * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
+        # if getattr(self.cfg.domain_rand, "init_base_vel_range", None) is None:
+        #     base_vel_range = (-0.5, 0.5)
+        # else:
+        #     base_vel_range = self.cfg.domain_rand.init_base_vel_range
+        # self.root_states[env_ids, 7:8] = torch_rand_float(
+        #     *base_vel_range[0],
+        #     (len(env_ids), 1),
+        #     device=self.device,
+        # )# * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
+        # self.root_states[env_ids, 8:9] = torch_rand_float(
+        #     *base_vel_range[1],
+        #     (len(env_ids), 1),
+        #     device=self.device,
+        # )# * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
+        # self.root_states[env_ids, 9:10] = torch_rand_float(
+        #     *base_vel_range[2],
+        #     (len(env_ids), 1),
+        #     device=self.device,
+        # )# * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
         # # debug use for training
         # base_vel_range = (0, 0)
 
@@ -539,7 +539,8 @@ class LeggedRobot(BaseTask):
         # robots that walked far enough progress to harder terains
         move_up = distance > self.terrain.env_length / 2
         # robots that walked less than half of their required distance go to simpler terrains
-        move_down = (distance < torch.norm(self.commands[env_ids, :2], dim=1)*self.max_episode_length_s*0.5) * ~move_up
+        # move_down = (distance < torch.norm(self.commands[env_ids, :2], dim=1)*self.max_episode_length_s*0.5) * ~move_up
+        move_down = distance < self.terrain.env_length / 4
         return move_up, move_down
     
     def update_command_curriculum(self, env_ids):

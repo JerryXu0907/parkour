@@ -1063,7 +1063,7 @@ class LeggedRobotParkour(LeggedRobot):
                 #     pose_arrow = pose_robot[:3] + 0.1*(j+3) * target_vec_norm[i, :3].cpu().numpy()
                 #     pose = gymapi.Transform(gymapi.Vec3(pose_arrow[0], pose_arrow[1], pose_arrow[2]), r=None)
                 #     gymutil.draw_lines(sphere_geom_arrow, self.gym, self.viewer, self.envs[i], pose)
-                for j in range(5):
+                for j in range(10):
                     t = j
                     ts = torch.tensor([t**5, t**4, t**3, t**2, t**1, 1], dtype=torch.float).to(self.device).unsqueeze(0)
                     pos = ts @ self.traj_coeff[i]
@@ -1076,3 +1076,19 @@ class LeggedRobotParkour(LeggedRobot):
                 goal = self.terrain_goals[t, self.terrain_types[i]].cpu().numpy()
                 pose = gymapi.Transform(gymapi.Vec3(goal[0], goal[1], goal[2]), r=None)
                 gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], pose)
+            
+            # if not self.terrain.cfg.measure_heights:
+            #     return
+            # self.gym.refresh_rigid_body_state_tensor(self.sim)
+            sphere_geom = gymutil.WireframeSphereGeometry(0.02, 4, 4, None, color=(1, 1, 0))
+            # i = self.lookat_id
+            base_pos = (self.root_states[i, :3]).cpu().numpy()
+            heights = self.measured_heights[i].cpu().numpy()
+            height_points = quat_apply_yaw(self.base_quat[i].repeat(heights.shape[0]), self.height_points[i]).cpu().numpy()
+            # for j in range(heights.shape[0]):
+            #     x = height_points[j, 0] + base_pos[0]
+            #     y = height_points[j, 1] + base_pos[1]
+            #     z = heights[j]
+            #     sphere_pose = gymapi.Transform(gymapi.Vec3(x, y, z), r=None)
+            #     gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], sphere_pose)
+        # x = input()

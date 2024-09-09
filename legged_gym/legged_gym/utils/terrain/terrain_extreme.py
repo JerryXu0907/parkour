@@ -109,8 +109,8 @@ class Terrain:
         # self.goal_vec_ranges is a 3x2 vector
         for j in range(self.cfg.num_cols):
             height = [(self.goal_vec_ranges[-1][-1] - self.goal_vec_ranges[-1][0]) / self.cfg.num_cols * j + self.goal_vec_ranges[-1][0],]
-            if self.cfg.num_cols // 2 - 2 <= j <= self.cfg.num_cols // 2 + 2:
-            # if False:
+            # if self.cfg.num_cols // 2 - 2 <= j <= self.cfg.num_cols // 2 + 2:
+            if False:
                 for i in range(self.cfg.num_rows):
                     terrain = terrain_utils.SubTerrain("terrain",
                                 width=self.length_per_env_pixels,
@@ -132,26 +132,26 @@ class Terrain:
             else:
                 for i in range(self.cfg.num_rows):
                     difficulty = i / (self.cfg.num_rows-1)
-                    if difficulty < 0.1:
-                        terrain = terrain_utils.SubTerrain("terrain",
-                                width=self.length_per_env_pixels,
-                                length=self.width_per_env_pixels,
-                                vertical_scale=self.cfg.vertical_scale,
-                                horizontal_scale=self.cfg.horizontal_scale)
-                        gap_size = 0.
-                        platform_height = parkour_gap_terrain(terrain,
-                                            gap_size=gap_size,
-                                            gap_depth=[0.2, 1],
-                                            pad_height=0,
-                                            x_range=[0.8, 1.5],
-                                            y_range=self.cfg.y_range,
-                                            half_valid_width=[0.6, 1.2],
-                                            # flat=True
-                                            )
-                        self.add_roughness(terrain)
-                        self.add_terrain_to_map(terrain, i, j, platform_height)
-                    else:
-                        terrain, platform_height = self.make_terrain_goal(height, difficulty)
+                    # if difficulty < 0.1:
+                    #     terrain = terrain_utils.SubTerrain("terrain",
+                    #             width=self.length_per_env_pixels,
+                    #             length=self.width_per_env_pixels,
+                    #             vertical_scale=self.cfg.vertical_scale,
+                    #             horizontal_scale=self.cfg.horizontal_scale)
+                    #     gap_size = 0.
+                    #     platform_height = parkour_gap_terrain(terrain,
+                    #                         gap_size=gap_size,
+                    #                         gap_depth=[0.2, 1],
+                    #                         pad_height=0,
+                    #                         x_range=[0.8, 1.5],
+                    #                         y_range=self.cfg.y_range,
+                    #                         half_valid_width=[0.6, 1.2],
+                    #                         # flat=True
+                    #                         )
+                    #     self.add_roughness(terrain)
+                    #     self.add_terrain_to_map(terrain, i, j, platform_height)
+                    # else:
+                    terrain, platform_height = self.make_terrain_goal(height, difficulty)
                     self.add_terrain_to_map(terrain, i, j, platform_height)
                 
 
@@ -229,7 +229,7 @@ class Terrain:
         return terrain, platform_height
     
 def parkour_gap_terrain(terrain,
-                           platform_len=0.8, 
+                           platform_len=1.5, 
                            platform_height=0., 
                            gap_size=0.3,
                            x_range=[0.3, 0.6],
@@ -263,8 +263,8 @@ def parkour_gap_terrain(terrain,
     # dis_x_min = round(x_range[0] / terrain.horizontal_scale) + gap_size
     # dis_x_max = round(x_range[1] / terrain.horizontal_scale) + gap_size
 
-    dis_x_min = platform_len + gap_size // 2
-    dis_x_max = terrain.width - platform_len - gap_size // 2
+    dis_x_min = gap_size // 2
+    dis_x_max = terrain.width - 2*platform_len - gap_size // 2
 
     dis_x = platform_len
     rand_x = np.random.randint(dis_x_min, dis_x_max)
@@ -291,7 +291,7 @@ def parkour_gap_terrain(terrain,
     return platform_height
 
 def parkour_step_terrain(terrain,
-                        platform_len=1.2, 
+                        platform_len=2.5, 
                         platform_height=0., 
                         num_stones=1,
                         x_range=[0.2, 0.4],
@@ -461,7 +461,7 @@ if __name__ == "__main__":
         selected = False # select a unique terrain type and pass all arguments
         terrain_kwargs = None # Dict of arguments for selected terrain
         max_init_terrain_level = 5 # starting curriculum state
-        terrain_length = 4.
+        terrain_length = 8.
         terrain_width = 4
         num_rows= 10 # number of terrain rows (levels)  # spreaded is benifitiall !
         num_cols = 40 # number of terrain cols (types)
@@ -502,12 +502,13 @@ if __name__ == "__main__":
     # load ball asset
     import os
     # asset_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, os.pardir, "assets")
-    asset_root = "/home/jerryxu/Desktop/isaacgym/assets"
+    # asset_root = "/home/jerryxu/Desktop/isaacgym/assets"
+    asset_root = "/home/zhengjie/Desktop/isaacgym/assets"
     asset_file = "urdf/ball.urdf"
     asset = gym.load_asset(sim, asset_root, asset_file, gymapi.AssetOptions())
 
     # set up the env grid
-    cfg.num_rows = 2
+    cfg.num_rows = 10
     cfg.num_cols = 4
     cfg.num_envs = 64
 
