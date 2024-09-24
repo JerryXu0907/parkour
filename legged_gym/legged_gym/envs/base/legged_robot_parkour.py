@@ -529,6 +529,7 @@ class LeggedRobotParkour(LeggedRobot):
     def _init_goals(self):
         self.terrain_goals = torch.from_numpy(self.terrain.goals[:, :, 0]).to(self.device).to(torch.float)
         self.env_goals = self.terrain_goals[self.terrain_levels, self.terrain_types] #- self.root_states[:, :3]
+        self.env_goals[:, -1] += 0.3
         self.env_goals_rel = self.terrain_goals[self.terrain_levels, self.terrain_types] - self.root_states[:, :3]
         self.init_velocities = self.root_states[:, 7:10]
         self.goal_velocities = torch.zeros_like(self.init_velocities)
@@ -555,6 +556,7 @@ class LeggedRobotParkour(LeggedRobot):
 
     def _reset_goals(self, env_ids):
         self.env_goals[env_ids] = self.terrain_goals[self.terrain_levels[env_ids], self.terrain_types[env_ids]] #- self.root_states[env_ids, :3]
+        self.env_goals[env_ids, -1] += 0.3
         self.env_goals_rel[env_ids] = self.terrain_goals[self.terrain_levels[env_ids], self.terrain_types[env_ids]] - self.root_states[env_ids, :3]
         self.init_velocities[env_ids] = self.root_states[env_ids, 7:10]
         self.goal_velocities[env_ids, 0:1] = torch_rand_float(*self.cfg.domain_rand.init_base_vel_range[0], (len(env_ids), 1), device=self.device)# * self.terrain_levels[env_ids].float().unsqueeze(-1) / self.cfg.terrain.num_rows
@@ -1044,6 +1046,12 @@ class LeggedRobotParkour(LeggedRobot):
         root_pos_rel = self.root_states[:, :3] - self.env_origins
         world_pos_error = torch.sum(torch.square(pos.squeeze() - root_pos_rel), dim=-1)
         return world_pos_error
+
+    def _reward_goal_dir_move(self):
+        norm = torch.norm(self.target_pos_rel, dim=-1, keepdim=True)
+        dist_move = self.root_states[:, :3] - self.last_root_pos
+        rew = torch.sqrt(torch.sum((norm * dist_move)**2, dim=-1))
+        return rew
 
     # -----------Debug-------------------
     def _draw_debug_vis(self):
