@@ -278,6 +278,8 @@ class LeggedRobotParkour(LeggedRobot):
         # update curriculum
         if self.cfg.terrain.curriculum:
             self._update_terrain_curriculum(env_ids)
+
+        self._update_command_curriculum(env_ids)
         
         self._fill_extras(env_ids)
 
@@ -449,7 +451,8 @@ class LeggedRobotParkour(LeggedRobot):
         self.target_pos_rel = self.env_goals - self.root_states[:, :3]
         self.target_pos_rel[ground_goals, -1] = 0.
 
-        self.reached_goal_ids = torch.norm(self.target_pos_rel, dim=1) < self.cfg.env.next_goal_threshold
+        # print(torch.norm(self.target_pos_rel[:, :-1], dim=1))
+        self.reached_goal_ids = torch.norm(self.target_pos_rel[:, :-1], dim=1) < self.cfg.env.next_goal_threshold
         self.reach_goal_timer[self.reached_goal_ids] += 1
         # self.target_pos_rel = quat_rotate_inverse(self.base_quat, self.target_pos_rel)
         # print(self.target_pos_rel)
@@ -525,6 +528,27 @@ class LeggedRobotParkour(LeggedRobot):
             raise NameError(f"Unknown controller type: {control_type}")
         return torch.clip(torques, -self.torque_limits, self.torque_limits)
     
+    def _resample_commands(self, env_ids):
+        """ Randommly select commands of some environments
+
+        Args:
+            env_ids (List[int]): Environments ids for which new commands are needed
+        """
+        # print(self.command_ranges["lin_vel_x"][0], self.command_ranges["lin_vel_x"][1])
+        self.commands[env_ids, 0] = torch_rand_float(self.command_ranges["lin_vel_x"][0], self.command_ranges["lin_vel_x"][1], (len(env_ids), 1), device=self.device).squeeze(1)
+        # print(self.commands[:, 0])
+    
+    def _update_command_curriculum(self, env_ids):
+        """ Implements a curriculum of increasing commands
+
+        Args:
+            env_ids (List[int]): ids of environments being reset
+        """
+        # If the tracking reward is above 80% of the maximum, increase the range of commands
+        if torch.mean(self.episode_sums["tracking_world_vel"][env_ids]) / self.max_episode_length > 0.8 * self.reward_scales["tracking_world_vel"]:
+            # self.command_ranges["lin_vel_x"][0] = np.clip(self.command_ranges["lin_vel_x"][0] - 0.5, -1, 0.)
+            self.command_ranges["lin_vel_x"][1] = np.clip(self.command_ranges["lin_vel_x"][1] + 0.5, 0., self.cfg.commands.max_curriculum)
+
     # ---------- Setting Goals ---------
     def _init_goals(self):
         self.terrain_goals = torch.from_numpy(self.terrain.goals[:, :, 0]).to(self.device).to(torch.float)
@@ -665,7 +689,7 @@ class LeggedRobotParkour(LeggedRobot):
         obs_buf = torch.cat((self.base_ang_vel  * self.obs_scales.ang_vel,   # 3
                             imu_obs,    # 2
                             self.delta_yaw[:, None],            # 1       
-                            # self.commands[:, 0:1],  #[1,1]
+                            self.commands[:, 0:1],      # 1
                             (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,   #  12
                             self.dof_vel * self.obs_scales.dof_vel,     #  12
                             self.last_actions,                          #  12
@@ -789,18 +813,18 @@ class LeggedRobotParkour(LeggedRobot):
 
     def _reward_tracking_lin_vel(self):
         # Tracking of linear velocity commands (xy axes)
-        lin_vel_error = torch.square(1.5 - self.root_states[:, 7]) + torch.square(self.root_states[:, 8])
+        lin_vel_error = torch.square(self.commands[:, 0] - self.root_states[:, 7]) + torch.square(self.root_states[:, 8])
         return torch.exp(-lin_vel_error/self.cfg.rewards.tracking_sigma)
     
     def _reward_lin_vel_l2norm(self):
         return torch.norm((self.commands[:, :2] - self.base_lin_vel[:, :2]), dim= 1)
 
     def _reward_world_vel_l2norm(self):
-        lin_vel_error = torch.square(1.5 - self.root_states[:, 7]) + torch.square(self.root_states[:, 8])
+        lin_vel_error = torch.square(self.commands[:, 0] - self.root_states[:, 7]) + torch.square(self.root_states[:, 8])
         return torch.sqrt(lin_vel_error)
 
     def _reward_tracking_world_vel(self):
-        world_vel_error = torch.square(1.5 - self.root_states[:, 7]) + torch.square(self.root_states[:, 8])
+        world_vel_error = torch.square(self.commands[:, 0] - self.root_states[:, 7]) + torch.square(self.root_states[:, 8])
         return torch.exp(-world_vel_error/self.cfg.rewards.tracking_sigma)
 
     def _reward_legs_energy(self):
