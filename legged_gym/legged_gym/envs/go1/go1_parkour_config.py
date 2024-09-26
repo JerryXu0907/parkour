@@ -41,14 +41,14 @@ class Go1ParkourCfg(LeggedRobotCfg):
     class env:
         num_envs = 4096
         obs_components = [
-            "proprioception", # 46
+            "proprioception", # 47
             "height_measurements", # 187
             "base_pose",        # explicit
             "robot_config",     # latent
             "goal",             # goal
             # "prop_history",     # history
         ]
-        n_proprio = 46
+        n_proprio = 47
         n_scan = 132
         n_base = 6
         n_priv_latent = n_robot_config = 1 + 3 + 1 + 12
@@ -76,7 +76,7 @@ class Go1ParkourCfg(LeggedRobotCfg):
         randomize_start_pitch = False
         rand_pitch_range = 1.6
         contact_buf_len = 100
-        next_goal_threshold = 0.2
+        next_goal_threshold = 0.30
         reach_goal_delay = 0.1
         num_future_goal_obs = 2
         timer = 10.
@@ -170,7 +170,8 @@ class Go1ParkourCfg(LeggedRobotCfg):
 
     class commands:
         curriculum = False
-        max_curriculum = 1.
+        # max_curriculum = 1.
+        max_curriculum = 2.5
         num_commands = 4 # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         resampling_time = 6. # time before command are changed[s]
         heading_command = True # if true: compute ang vel command from heading error
@@ -179,7 +180,7 @@ class Go1ParkourCfg(LeggedRobotCfg):
         ang_vel_clip = 0.4
         # Easy ranges
         class ranges:
-            lin_vel_x = [0., 1.5] # min max [m/s]
+            lin_vel_x = [0.8, 1.5] # min max [m/s]
             lin_vel_y = [0.0, 0.0]   # min max [m/s]
             ang_vel_yaw = [0, 0]    # min max [rad/s]
             heading = [0, 0]
@@ -267,9 +268,9 @@ class Go1ParkourCfg(LeggedRobotCfg):
     class rewards:
         class scales:
             tracking_yaw = 0.5
-            tracking_ang_vel = 0.05
-            tracking_world_vel = 3.
-            goal_dir_move = 5.
+            # tracking_ang_vel = 0.05
+            tracking_world_vel = 1.
+            goal_dir_move = 2.
             legs_energy_substeps = -2e-5
             exceed_dof_pos_limits = -8e-1
             exceed_torque_limits_l1norm = -8e-1
@@ -281,7 +282,7 @@ class Go1ParkourCfg(LeggedRobotCfg):
             torques = -1.e-5
             hip_pos = -0.4
             dof_error = -0.04
-            goal_vel_align = 5.
+            # goal_vel_align = 5.
             # follow_traj_vel = 5.
             # follow_traj_pos = -1.
             # world_vel_l2norm = -2.
