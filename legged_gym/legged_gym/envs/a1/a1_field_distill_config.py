@@ -3,7 +3,7 @@ import os
 import os.path as osp
 from datetime import datetime
 import numpy as np
-from legged_gym.envs.a1.a1_field_config_new import A1FieldCfg, A1FieldCfgPPO
+from legged_gym.envs.a1.a1_field_config import A1FieldCfg, A1FieldCfgPPO
 from legged_gym.utils.helpers import merge_dict
 
 class A1FieldDistillCfg( A1FieldCfg ):
@@ -45,7 +45,7 @@ class A1FieldDistillCfg( A1FieldCfg ):
 
             # adding randomized latency
             latency_range = [0.2, 0.26] # for [16, 32, 32] -> 128 -> 128 visual model in (240, 424 option)
-            latency_resample_time = 5.0 # [s]
+            latency_resampling_time = 5.0 # [s]
             refresh_duration = 1/10 # [s] for (240, 424 option with onboard script fixed to no more than 20Hz)
 
             # config to simulate stero RGBD camera
@@ -56,7 +56,7 @@ class A1FieldDistillCfg( A1FieldCfg ):
         class proprioception:
             delay_action_obs = True
             latency_range = [0.04-0.0025, 0.04+0.0075] # [min, max] in seconds
-            latency_resample_time = 2.0 # [s]
+            latency_resampling_time = 2.0 # [s]
 
     class terrain( A1FieldCfg.terrain ):
         num_rows = 2

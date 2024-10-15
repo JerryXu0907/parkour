@@ -34,7 +34,8 @@ from datetime import datetime
 
 import isaacgym
 from legged_gym.envs import *
-from legged_gym.utils import get_args, task_registry
+from legged_gym.utils import get_args#, task_registry
+from legged_gym.utils.task_registry import task_registry
 import torch
 import wandb
 from legged_gym.debugger import break_into_debugger
@@ -51,8 +52,8 @@ def train(args):
     if args.no_wandb:
         mode = "disabled"
     wandb.init(project=args.proj_name, name=args.exptid, entity="xhsyjerry", group=args.exptid[:3], mode=mode, dir="../../logs")
-    wandb.save(LEGGED_GYM_ENVS_DIR + "/go1/go1_parkour_config.py", policy="now")
-    wandb.save(LEGGED_GYM_ENVS_DIR + "/base/legged_robot_parkour.py", policy="now")
+    wandb.save(LEGGED_GYM_ENVS_DIR + "/a1/a1_field_config.py", policy="now")
+    wandb.save(LEGGED_GYM_ENVS_DIR + "/base/legged_robot_field.py", policy="now")
     env, env_cfg = task_registry.make_env(name=args.task, args=args)
     ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args, env_cfg=env_cfg)
     ppo_runner.learn(num_learning_iterations=train_cfg.runner.max_iterations, init_at_random_ep_len=True)
