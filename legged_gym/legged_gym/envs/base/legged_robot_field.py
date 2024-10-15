@@ -10,6 +10,28 @@ from legged_gym.utils.terrain import get_terrain_cls
 from legged_gym.utils.observation import get_obs_slice
 from .legged_robot_config import LeggedRobotCfg
 
+def euler_from_quaternion(quat_angle):
+        """
+        Convert a quaternion into euler angles (roll, pitch, yaw)
+        roll is rotation around x in radians (counterclockwise)
+        pitch is rotation around y in radians (counterclockwise)
+        yaw is rotation around z in radians (counterclockwise)
+        """
+        x = quat_angle[:,0]; y = quat_angle[:,1]; z = quat_angle[:,2]; w = quat_angle[:,3]
+        t0 = +2.0 * (w * x + y * z)
+        t1 = +1.0 - 2.0 * (x * x + y * y)
+        roll_x = torch.atan2(t0, t1)
+     
+        t2 = +2.0 * (w * y - z * x)
+        t2 = torch.clip(t2, -1, 1)
+        pitch_y = torch.asin(t2)
+     
+        t3 = +2.0 * (w * z + x * y)
+        t4 = +1.0 - 2.0 * (y * y + z * z)
+        yaw_z = torch.atan2(t3, t4)
+     
+        return roll_x, pitch_y, yaw_z # in radians
+
 class LeggedRobotField(LeggedRobot):
     """ NOTE: Most of this class implementation does not depend on the terrain. Check where
     `check_BarrierTrack_terrain` is called to remove the dependency of BarrierTrack terrain.
@@ -143,6 +165,7 @@ class LeggedRobotField(LeggedRobot):
     
     def post_physics_step(self):
         self.gym.refresh_rigid_body_state_tensor(self.sim)
+        self.roll, self.pitch, self.yaw = euler_from_quaternion(self.base_quat)
         return super().post_physics_step()
     
     def check_termination(self):
@@ -334,7 +357,8 @@ class LeggedRobotField(LeggedRobot):
         self.all_rigid_body_states = gymtorch.wrap_tensor(rigid_body_state)
         # add sensor dict, which will be filled during create sensor
         self.sensor_tensor_dict = defaultdict(list)
-
+        self.obs_history_buf = torch.zeros(self.num_envs, self.cfg.env.history_len, self.cfg.env.n_proprio, dtype= torch.float32, device=self.device)
+        
         for env_i, env_handle in enumerate(self.envs):
             if "forward_depth" in self.all_obs_components:
                 self.sensor_tensor_dict["forward_depth"].append(gymtorch.wrap_tensor(
@@ -506,23 +530,81 @@ class LeggedRobotField(LeggedRobot):
         base_positions = self.root_states[:, 0:3] # (n_envs, 3)
         return self.terrain.get_sidewall_distance(base_positions)
 
-    def _get_obs_from_components(self, components: list, privileged= False):
-        obs_segments = self.get_obs_segment_from_components(components)
-        obs = []
-        for k, v in obs_segments.items():
-            if k == "proprioception":
-                obs.append(self._get_proprioception_obs(privileged))
-            elif k == "height_measurements":
-                obs.append(self._get_height_measurements_obs(privileged))
-            else:
-                # get the observation from specific component name
-                # such as "_get_forward_depth_obs"
-                obs.append(
-                    getattr(self, "_get_" + k + "_obs")(privileged) * \
-                    getattr(self.obs_scales, k, 1.)
-                )
-        obs = torch.cat(obs, dim= 1)
-        return obs
+    # def _get_obs_from_components(self, components: list, privileged= False):
+    #     obs_segments = self.get_obs_segment_from_components(components)
+    #     obs = []
+    #     for k, v in obs_segments.items():
+    #         if k == "proprioception":
+    #             obs.append(self._get_proprioception_obs(privileged))
+    #         elif k == "height_measurements":
+    #             obs.append(self._get_height_measurements_obs(privileged))
+    #         else:
+    #             # get the observation from specific component name
+    #             # such as "_get_forward_depth_obs"
+    #             obs.append(
+    #                 getattr(self, "_get_" + k + "_obs")(privileged) * \
+    #                 getattr(self.obs_scales, k, 1.)
+    #             )
+    #     obs = torch.cat(obs, dim= 1)
+    #     return obs
+
+    # def compute_observations(self):
+    #     for key in self.sensor_handles[0].keys():
+    #         if "camera" in key:
+    #             # NOTE: Different from the documentation and examples from isaacgym
+    #             # gym.fetch_results() must be called before gym.start_access_image_tensors()
+    #             # refer to https://forums.developer.nvidia.com/t/camera-example-and-headless-mode/178901/10
+    #             self.gym.fetch_results(self.sim, True)
+    #             self.gym.step_graphics(self.sim)
+    #             self.gym.render_all_camera_sensors(self.sim)
+    #             self.gym.start_access_image_tensors(self.sim)
+    #             break
+    #     add_noise = self.add_noise; self.add_noise = False
+    #     return_ = super().compute_observations() # currently self.obs_buf is a mess
+    #     self.obs_super_impl = self.obs_buf
+    #     self.add_noise = add_noise
+
+    #     # actor obs
+    #     self.obs_buf = self._get_obs_from_components(
+    #         self.cfg.env.obs_components,
+    #         privileged= False,
+    #     )
+    #     if getattr(self.cfg.domain_rand, "randomize_gravity_bias", False) and "proprioception" in self.cfg.env.obs_components:
+    #         # NOTE: The logic order is a bit messed up here when combining using legged_robot_noisy.py
+    #         # When simulating the sensor bias/noise and latency, the gravity bias should be added before
+    #         # proprioception latency.
+    #         # However, considering gravirty bias is randomized across trajectory, the latency simulation
+    #         # from legged_robot_noisy.py does not need to be computed after adding the bias.
+    #         # So, this computation order looks OK.
+    #         assert hasattr(self, "gravity_bias")
+    #         proprioception_slice = get_obs_slice(self.obs_segments, "proprioception")
+    #         self.obs_buf[:, proprioception_slice[0].start + 6: proprioception_slice[0].start + 9] += self.gravity_bias
+    #     if self.add_noise:
+    #         self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
+
+    #     # critic obs
+    #     if not self.num_privileged_obs is None:
+    #         self.privileged_obs_buf[:] = self._get_obs_from_components(
+    #             self.cfg.env.privileged_obs_components,
+    #             privileged= getattr(self.cfg.env, "privileged_obs_gets_privilege", False),
+    #         )
+    #     # fixing linear velocity in proprioception observation
+    #     if "proprioception" in getattr(self.cfg.env, "privileged_obs_components", []) \
+    #         and getattr(self.cfg.env, "privileged_use_lin_vel", False):
+    #         # NOTE: according to self.get_obs_segment_from_components, "proprioception" observation
+    #         # is always the FIRST part of this flattened observation. check super().compute_observations
+    #         # and self.cfg.env.use_lin_vel for the reason of this if branch.
+    #         self.privileged_obs_buf[:, :3] = self.base_lin_vel * self.obs_scales.lin_vel
+    #     if getattr(self.cfg.domain_rand, "randomize_privileged_gravity_bias", False) and "proprioception" in getattr(self.cfg.env, "privileged_obs_components", []):
+    #         assert hasattr(self, "gravity_bias")
+    #         proprioception_slice = get_obs_slice(self.privileged_obs_segments, "proprioception")
+    #         self.privileged_obs_buf[:, proprioception_slice[0].start + 6: proprioception_slice[0].start + 9] += self.gravity_bias
+
+    #     for key in self.sensor_handles[0].keys():
+    #         if "camera" in key:
+    #             self.gym.end_access_image_tensors(self.sim)
+    #             break
+    #     return return_
 
     def compute_observations(self):
         for key in self.sensor_handles[0].keys():
@@ -536,51 +618,80 @@ class LeggedRobotField(LeggedRobot):
                 self.gym.start_access_image_tensors(self.sim)
                 break
         add_noise = self.add_noise; self.add_noise = False
-        return_ = super().compute_observations() # currently self.obs_buf is a mess
-        self.obs_super_impl = self.obs_buf
-        self.add_noise = add_noise
-
-        # actor obs
+        # super().compute_observations()
+        # self.obs_super_impl = self.obs_buf
         self.obs_buf = self._get_obs_from_components(
             self.cfg.env.obs_components,
             privileged= False,
         )
-        if getattr(self.cfg.domain_rand, "randomize_gravity_bias", False) and "proprioception" in self.cfg.env.obs_components:
-            # NOTE: The logic order is a bit messed up here when combining using legged_robot_noisy.py
-            # When simulating the sensor bias/noise and latency, the gravity bias should be added before
-            # proprioception latency.
-            # However, considering gravirty bias is randomized across trajectory, the latency simulation
-            # from legged_robot_noisy.py does not need to be computed after adding the bias.
-            # So, this computation order looks OK.
-            assert hasattr(self, "gravity_bias")
-            proprioception_slice = get_obs_slice(self.obs_segments, "proprioception")
-            self.obs_buf[:, proprioception_slice[0].start + 6: proprioception_slice[0].start + 9] += self.gravity_bias
-        if self.add_noise:
-            self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
+        self.add_noise = add_noise
 
-        # critic obs
-        if not self.num_privileged_obs is None:
-            self.privileged_obs_buf[:] = self._get_obs_from_components(
-                self.cfg.env.privileged_obs_components,
-                privileged= getattr(self.cfg.env, "privileged_obs_gets_privilege", False),
+    def _get_obs_from_components(self, components: list, privileged= False):
+        obs_segments = self.get_obs_segment_from_components(components)
+        obs = []
+        for k, v in obs_segments.items():
+            # if k == "proprioception":
+            #     obs.append(self._get_proprioception_obs(privileged))
+            # elif k == "height_measurements":
+            #     obs.append(self._get_height_measurements_obs(privileged))
+            # else:
+            #     # get the observation from specific component name
+            #     # such as "_get_forward_depth_obs"
+            obs.append(
+                getattr(self, "_get_" + k + "_obs")(privileged) * \
+                getattr(self.obs_scales, k, 1.)
             )
-        # fixing linear velocity in proprioception observation
-        if "proprioception" in getattr(self.cfg.env, "privileged_obs_components", []) \
-            and getattr(self.cfg.env, "privileged_use_lin_vel", False):
-            # NOTE: according to self.get_obs_segment_from_components, "proprioception" observation
-            # is always the FIRST part of this flattened observation. check super().compute_observations
-            # and self.cfg.env.use_lin_vel for the reason of this if branch.
-            self.privileged_obs_buf[:, :3] = self.base_lin_vel * self.obs_scales.lin_vel
-        if getattr(self.cfg.domain_rand, "randomize_privileged_gravity_bias", False) and "proprioception" in getattr(self.cfg.env, "privileged_obs_components", []):
-            assert hasattr(self, "gravity_bias")
-            proprioception_slice = get_obs_slice(self.privileged_obs_segments, "proprioception")
-            self.privileged_obs_buf[:, proprioception_slice[0].start + 6: proprioception_slice[0].start + 9] += self.gravity_bias
+        obs = torch.cat(obs, dim= 1)
+        return obs
+    
+    def _get_proprioception_obs(self, privileged= False):
+        imu_obs = torch.stack((self.roll, self.pitch), dim=1)
+        # self.delta_yaw = self.target_yaw - self.yaw     
+        obs_buf = torch.cat((self.base_ang_vel  * self.obs_scales.ang_vel,   # 3
+                            imu_obs,    # 2
+                            # self.delta_yaw[:, None],            # 1       
+                            self.commands[:, :3] * self.commands_scale,      # 3
+                            (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,   #  12
+                            self.dof_vel * self.obs_scales.dof_vel,     #  12
+                            self.last_actions,                          #  12
+                            # self.contact_filt.float()-0.5,              #  4
+                            ),dim=-1)
+        self.obs_history_buf = torch.where(
+            (self.episode_length_buf <= 1)[:, None, None], 
+            torch.stack([obs_buf] * self.cfg.env.history_len, dim=1),
+            torch.cat([
+                self.obs_history_buf[:, 1:],
+                obs_buf.unsqueeze(1)
+            ], dim=1)
+        )
+        return obs_buf
+    
+    def _get_prop_history_obs(self, privileged=False):
+        return self.obs_history_buf.reshape(self.num_envs, -1)
+    
+    def _get_height_measurements_obs(self, privileged= False):
+        heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.3 - self.measured_heights, -1, 1.)
+        return heights
+    
+    def _get_forward_depth_obs(self, privileged= False):
+        return torch.stack(self.sensor_tensor_dict["forward_depth"]).flatten(start_dim= 1)
 
-        for key in self.sensor_handles[0].keys():
-            if "camera" in key:
-                self.gym.end_access_image_tensors(self.sim)
-                break
-        return return_
+    def _get_base_pose_obs(self, privileged= False):
+        roll, pitch, yaw = get_euler_xyz(self.root_states[:, 3:7])
+        roll[roll > np.pi] -= np.pi * 2 # to range (-pi, pi)
+        pitch[pitch > np.pi] -= np.pi * 2 # to range (-pi, pi)
+        yaw[yaw > np.pi] -= np.pi * 2 # to range (-pi, pi)
+        return torch.cat([
+            self.root_states[:, :3] - self.env_origins,
+            torch.stack([roll, pitch, yaw], dim= -1),
+        ], dim= -1)
+
+    def _get_goal_obs(self, privileged=False):
+        goal_obs_buf = torch.cat([self.env_goals_rel, 
+                                  self.init_velocities * self.obs_scales.lin_vel,
+                                  self.goal_velocities * self.obs_scales.lin_vel], dim=-1)
+        return goal_obs_buf
+
 
     def _get_noise_scale_vec(self, cfg):
         noise_vec = torch.zeros_like(self.obs_buf[0])
@@ -744,9 +855,9 @@ class LeggedRobotField(LeggedRobot):
         """
         segments = OrderedDict()
         if "proprioception" in components:
-            segments["proprioception"] = (48,)
+            segments["proprioception"] = (44,)
         if "height_measurements" in components:
-            segments["height_measurements"] = (187,)
+            segments["height_measurements"] = (132,)
         if "forward_depth" in components:
             segments["forward_depth"] = (1, *self.cfg.sensor.forward_camera.resolution)
         if "base_pose" in components:
