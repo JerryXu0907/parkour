@@ -323,6 +323,6 @@ class A1FieldCfgPPO( A1RoughCfgPPO ):
         ),
         ])
         resume = False
-        max_iterations = 5000
+        max_iterations = 15000
         save_interval = 500
     
