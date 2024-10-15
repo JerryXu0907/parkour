@@ -232,7 +232,7 @@ class LeggedRobotParkour(LeggedRobot):
         """
         segments = OrderedDict()
         if "proprioception" in components:
-            segments["proprioception"] = (46,)
+            segments["proprioception"] = (47,)
         if "height_measurements" in components:
             segments["height_measurements"] = (132,)
         if "forward_depth" in components:

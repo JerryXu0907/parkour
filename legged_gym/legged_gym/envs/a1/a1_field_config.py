@@ -4,16 +4,35 @@ from legged_gym.envs.a1.a1_config import A1RoughCfg, A1RoughCfgPPO
 class A1FieldCfg( A1RoughCfg ):
     class env( A1RoughCfg.env ):
         num_envs = 4096 # 8192
-        obs_components = [
-            "proprioception", # 48
-            # "height_measurements", # 187
-            "base_pose",
-            "robot_config",
-            "engaging_block",
-            "sidewall_distance",
-        ]
+        # obs_components = [
+        #     "proprioception", # 48
+        #     # "height_measurements", # 187
+        #     "base_pose",
+        #     "robot_config",
+        #     "engaging_block",
+        #     "sidewall_distance",
+        # ]
         # privileged_use_lin_vel = True # for the possible of setting "proprioception" in obs and privileged obs different
-
+        num_envs = 4096
+        obs_components = [
+            "proprioception", # 44
+            "height_measurements", # 132
+            "base_pose",        # explicit
+            "robot_config",     # latent
+            "goal",             # goal
+            # "prop_history",     # history
+        ]
+        n_proprio = 44
+        n_scan = 132
+        n_base = 6
+        n_priv_latent = n_robot_config = 1 + 3 + 1 + 12
+        n_goal = 3 + 3 + 3
+        n_priv = n_priv_explicit = n_base# + n_goal
+        # n_priv = 3+3 +3
+        # n_priv_latent = 4 + 1 + 12 +12
+        # n_proprio = 3 + 2 + 3 + 4 + 36 + 5
+        history_len = 10
+        num_observations = n_proprio + n_scan + n_priv_latent + n_goal + n_priv_explicit
         ######## configs for training a walk policy ############
         # obs_components = [
         #     "proprioception", # 48
@@ -247,6 +266,7 @@ class A1FieldCfg( A1RoughCfg ):
         # chosen heuristically, please refer to `LeggedRobotField._get_terrain_curriculum_move` with fixed body_measure_points
 
 class A1FieldCfgPPO( A1RoughCfgPPO ):
+    runner_class_name = 'OnPolicyRunnerVel'
     class algorithm( A1RoughCfgPPO.algorithm ):
         entropy_coef = 0.01
         clip_min_std = 1e-12
@@ -257,6 +277,7 @@ class A1FieldCfgPPO( A1RoughCfgPPO ):
 
     class runner( A1RoughCfgPPO.runner ):
         policy_class_name = "ActorCriticRecurrent"
+        algorithm_class_name = 'PPOVel'
         experiment_name = "field_a1"
         run_name = "".join(["WalkingBase",
         ("_pEnergySubsteps" + np.format_float_scientific(-A1FieldCfg.rewards.scales.legs_energy_substeps, precision=1, exp_digits=1, trim="-") if A1FieldCfg.rewards.scales.legs_energy_substeps != 0 else ""),

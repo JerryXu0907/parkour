@@ -78,7 +78,7 @@ def create_recording_camera(gym, env_handle,
 @torch.no_grad()
 def play(args):
     env_cfg, train_cfg = task_registry.get_cfgs(name=args.task)
-    with open(os.path.join("logs", train_cfg.runner.experiment_name, args.load_run, "config.json"), "r") as f:
+    with open(os.path.join("../logs", train_cfg.runner.experiment_name, args.load_run, "config.json"), "r") as f:
         d = json.load(f, object_pairs_hook= OrderedDict)
         update_class_from_dict(env_cfg, d, strict= True)
         update_class_from_dict(train_cfg, d, strict= True)
@@ -102,7 +102,7 @@ def play(args):
     env_cfg.terrain.BarrierTrack_kwargs["options"] = [
         # "crawl",
         # "jump",
-        "leap",
+        # "leap",
         # "tilt",
     ]
     env_cfg.terrain.BarrierTrack_kwargs["leap"] = dict(
@@ -114,7 +114,7 @@ def play(args):
     if "one_obstacle_per_track" in env_cfg.terrain.BarrierTrack_kwargs.keys():
         env_cfg.terrain.BarrierTrack_kwargs.pop("one_obstacle_per_track")
     env_cfg.terrain.BarrierTrack_kwargs["n_obstacles_per_track"] = 1# 2
-    env_cfg.commands.ranges.lin_vel_x = [1.5, 1.5] # [1.2, 1.2]
+    env_cfg.commands.ranges.lin_vel_x = [0.5, 1.0] # [1.2, 1.2]
     env_cfg.terrain.BarrierTrack_kwargs['track_block_length']= 2.0
     # env_cfg.terrain.BarrierTrack_kwargs['track_width'] = 2.0
     if "distill" in args.task:
@@ -133,7 +133,7 @@ def play(args):
     env_cfg.viewer.debug_viz = False # in a1_distill, setting this to true will constantly showing the egocentric depth view.
     env_cfg.viewer.draw_volume_sample_points = False
     train_cfg.runner.resume = True
-    train_cfg.runner_class_name = "OnPolicyRunner"
+    train_cfg.runner_class_name = "OnPolicyRunnerVel"
     if "distill" in args.task: # to save the memory
         train_cfg.algorithm.teacher_policy.sub_policy_paths = []
         train_cfg.algorithm.teacher_policy_class_name = "ActorCritic"
