@@ -4,17 +4,37 @@ from legged_gym.envs.a1.a1_config import A1RoughCfg, A1RoughCfgPPO
 
 class A1FieldCfg( A1RoughCfg ):
     class env( A1RoughCfg.env ):
-        num_envs = 4096 # 8192
-        obs_components = [
-            "proprioception", # 48
-            # "height_measurements", # 187
-            "base_pose",
-            "robot_config",
-            "engaging_block",
-            "sidewall_distance",
-        ]
+        # num_envs = 4096 # 8192
+        # obs_components = [
+        #     "proprioception", # 48
+        #     # "height_measurements", # 187
+        #     "base_pose",
+        #     "robot_config",
+        #     "engaging_block",
+        #     "sidewall_distance",
+        # ]
         # privileged_use_lin_vel = True # for the possible of setting "proprioception" in obs and privileged obs different
-
+        num_envs = 4096
+        obs_components = [
+            "proprioception", # 44
+            "height_measurements", # 132
+            "base_pose",        # explicit
+            "robot_config",     # latent
+            # "goal",             # goal
+            # "prop_history",     # history
+        ]
+        n_proprio = 44
+        n_scan = 187
+        n_base = 6
+        n_priv_latent = n_robot_config = 1 + 3 + 1 + 12
+        # n_goal = 3 + 3 + 3
+        n_priv = n_priv_explicit = n_base# + n_goal
+        # n_priv = 3+3 +3
+        # n_priv_latent = 4 + 1 + 12 +12
+        # n_proprio = 3 + 2 + 3 + 4 + 36 + 5
+        history_len = 10
+        num_observations = n_proprio + n_scan + n_priv_latent + n_priv_explicit # + n_goal
+        
         ######## configs for training a walk policy ############
         # obs_components = [
         #     "proprioception", # 48
@@ -45,7 +65,8 @@ class A1FieldCfg( A1RoughCfg ):
             latency_resampling_time = 2.0 # [s]
     
     class terrain( A1RoughCfg.terrain ):
-        mesh_type = "trimesh" # Don't change
+        # mesh_type = "trimesh" # Don't change
+        mesh_type = None#"plane"
         num_rows = 20
         num_cols = 50
         selected = "BarrierTrack" # "BarrierTrack" or "TerrainPerlin", "TerrainPerlin" can be used for training a walk policy.
@@ -110,6 +131,8 @@ class A1FieldCfg( A1RoughCfg ):
         )
     
     class commands( A1RoughCfg.commands ):
+        curriculum = True
+        max_curriculum = 3.
         heading_command = False
         resampling_time = 10 # [s]
         class ranges( A1RoughCfg.commands.ranges ):
@@ -270,6 +293,7 @@ class A1FieldCfg( A1RoughCfg ):
 
 logs_root = osp.join(osp.dirname(osp.dirname(osp.dirname(osp.dirname(osp.abspath(__file__))))), "logs")
 class A1FieldCfgPPO( A1RoughCfgPPO ):
+    runner_class_name = 'OnPolicyRunnerVel'
     class algorithm( A1RoughCfgPPO.algorithm ):
         entropy_coef = 0.01
         clip_min_std = 1e-12
@@ -280,6 +304,7 @@ class A1FieldCfgPPO( A1RoughCfgPPO ):
     
     class runner( A1RoughCfgPPO.runner ):
         policy_class_name = "ActorCriticRecurrent"
+        algorithm_class_name = 'PPOVel'
         experiment_name = "field_a1"
         resume = False
         

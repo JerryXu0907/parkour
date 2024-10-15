@@ -873,8 +873,8 @@ class LeggedRobot(BaseTask):
             env_ids (List[int]): ids of environments being reset
         """
         # If the tracking reward is above 80% of the maximum, increase the range of commands
-        if torch.mean(self.episode_sums["tracking_lin_vel"][env_ids]) / self.max_episode_length > 0.8 * self.reward_scales["tracking_lin_vel"]:
-            self.command_ranges["lin_vel_x"][0] = np.clip(self.command_ranges["lin_vel_x"][0] - 0.5, -self.cfg.commands.max_curriculum, 0.)
+        if torch.mean(self.episode_sums["world_vel_l2norm"][env_ids]) / self.max_episode_length > 0.8 * self.reward_scales["world_vel_l2norm"]:
+            self.command_ranges["lin_vel_x"][0] = np.clip(self.command_ranges["lin_vel_x"][0] - 0.5, -1, 0.)
             self.command_ranges["lin_vel_x"][1] = np.clip(self.command_ranges["lin_vel_x"][1] + 0.5, 0., self.cfg.commands.max_curriculum)
 
 
@@ -935,7 +935,7 @@ class LeggedRobot(BaseTask):
     def _write_base_pose_noise(self, noise_vec):
         if not hasattr(self.cfg.noise.noise_scales, "base_pose"):
             return
-        noise_vec[:] = self.cfg.noise.noise_scales.base_pose * self.cfg.noise.noise_level * self.obs_scales.base_pose
+        noise_vec[:] = self.cfg.noise.noise_scales.base_pose * self.cfg.noise.noise_level * torch.tensor(self.obs_scales.base_pose, device=noise_vec.device, requires_grad=False)
     
     def _write_robot_config_noise(self, noise_vec):
         if not hasattr(self.cfg.noise.noise_scales, "robot_config"):
@@ -1911,3 +1911,12 @@ class LeggedRobot(BaseTask):
             self.dof_pos_limits[:, 1] - self.dof_pos_limits[:, 0]
         ).unsqueeze(0).unsqueeze(0) # shape: (n_envs, n_substeps, n_dofs)
         return torch.square(substep_ratio).sum(dim= 1).sum(dim= 1)
+
+    def _reward_legs_energy_substeps(self):
+        # (n_envs, n_substeps, n_dofs) 
+        # square sum -> (n_envs, n_substeps)
+        # mean -> (n_envs,)
+        return torch.mean(torch.sum(torch.square(self.substep_torques * self.substep_dof_vel), dim=-1), dim=-1)
+
+    def _reward_legs_energy_abs(self):
+        return torch.sum(torch.abs(self.torques * self.dof_vel), dim=1)
