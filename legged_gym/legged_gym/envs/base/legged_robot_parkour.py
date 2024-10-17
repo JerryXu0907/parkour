@@ -223,6 +223,9 @@ class LeggedRobotParkour(LeggedRobot):
 
     def check_termination(self):
         # super().check_termination()
+        self.reset_buf = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1., dim=1)
+        self.time_out_buf = self.episode_length_buf > self.max_episode_length
+        self.reset_buf |= self.time_out_buf
         for i in range(len(self.termination_functions)):
             self.termination_functions[i]()
 

@@ -39,7 +39,7 @@ import numpy as np
 
 class Go1ParkourCfg(LeggedRobotCfg):
     class env:
-        num_envs = 4096
+        num_envs = 2048
         obs_components = [
             "proprioception", # 48
             "height_measurements", # 132
