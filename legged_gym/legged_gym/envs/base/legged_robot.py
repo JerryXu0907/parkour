@@ -485,21 +485,22 @@ class LeggedRobot(BaseTask):
         if components is None:
             return None
         else:
-            if "proprioception" in components:
-                # backward compatibile for proprioception obs components
-                print("\033[1;36m Warning: proprioception is deprecated, use lin_vel, ang_vel, projected_gravity, commands, dof_pos, dof_vel, last_actions instead.\033[0;0m")
-                components.remove("proprioception")
-                components += ["lin_vel", "ang_vel", "projected_gravity", "commands", "dof_pos", "dof_vel", "last_actions"]
+            # if "proprioception" in components:
+            #     # backward compatibile for proprioception obs components
+            #     print("\033[1;36m Warning: proprioception is deprecated, use lin_vel, ang_vel, projected_gravity, commands, dof_pos, dof_vel, last_actions instead.\033[0;0m")
+            #     components.remove("proprioception")
+            #     components += ["lin_vel", "ang_vel", "projected_gravity", "commands", "dof_pos", "dof_vel", "last_actions"]
             return self.get_obs_segment_from_components(components)
     @property
     def num_obs(self):
         """ get this value from self.cfg.env """
-        if "proprioception" in self.cfg.env.obs_components:
-            # backward compatibile for proprioception obs components
-            print("\033[1;36m Warning: proprioception is deprecated, use lin_vel, ang_vel, projected_gravity, commands, dof_pos, dof_vel, last_actions instead.\033[0;0m")
-            self.cfg.env.obs_components.remove("proprioception")
-            self.cfg.env.obs_components = ["lin_vel", "ang_vel", "projected_gravity", "commands", "dof_pos", "dof_vel", "last_actions"] + self.cfg.env.obs_components
-        return self.get_num_obs_from_components(self.cfg.env.obs_components)
+        # if "proprioception" in self.cfg.env.obs_components:
+        #     # backward compatibile for proprioception obs components
+        #     print("\033[1;36m Warning: proprioception is deprecated, use lin_vel, ang_vel, projected_gravity, commands, dof_pos, dof_vel, last_actions instead.\033[0;0m")
+        #     self.cfg.env.obs_components.remove("proprioception")
+        #     self.cfg.env.obs_components = ["lin_vel", "ang_vel", "projected_gravity", "commands", "dof_pos", "dof_vel", "last_actions"] + self.cfg.env.obs_components
+        # return self.get_num_obs_from_components(self.cfg.env.obs_components)
+        return self.cfg.env.num_observations
     @num_obs.setter
     def num_obs(self, value):
         """ avoid setting self.num_obs """
@@ -522,7 +523,7 @@ class LeggedRobot(BaseTask):
         pass
     @property
     def num_actions(self):
-        return self.num_dof
+        return self.cfg.env.num_actions
     @num_actions.setter
     def num_actions(self, value):
         """ avoid setting self.num_actions """
@@ -786,6 +787,7 @@ class LeggedRobot(BaseTask):
             base_vel_range = (-0.5, 0.5)
         else:
             base_vel_range = self.cfg.domain_rand.init_base_vel_range
+        base_vel_range = (-0.5, 0.5)
         if isinstance(base_vel_range, (tuple, list)):
             self.root_states[env_ids, 7:13] = torch_rand_float(
                 *base_vel_range,
@@ -1439,7 +1441,7 @@ class LeggedRobot(BaseTask):
             Otherwise create a grid.
         """
         if getattr(self.cfg.terrain, "selected", None) is not None:
-            assert getattr(self.cfg.terrain, "mesh_type", None) is None, "Cannot have both terrain.selected and terrain.mesh_type"
+            # assert getattr(self.cfg.terrain, "mesh_type", None) is None, "Cannot have both terrain.selected and terrain.mesh_type"
             self.custom_origins = True
             self.env_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
             # put robots at the origins defined by the terrain
@@ -1563,7 +1565,7 @@ class LeggedRobot(BaseTask):
         if getattr(self.cfg.viewer, "draw_sensor_readings", False):
             for env_h, sensor_hd in zip(self.envs, self.sensor_handles):
                 self._draw_sensor_reading_vis(env_h, sensor_hd)
-        if self.cfg.viewer.draw_commands:
+        if getattr(self.cfg.viewer, "draw_commands", False):
             self._draw_commands_vis()
         if hasattr(self, "volume_sample_points") and getattr(self.cfg.viewer, "draw_volume_sample_points", False):
             self._draw_volume_sample_points_vis()

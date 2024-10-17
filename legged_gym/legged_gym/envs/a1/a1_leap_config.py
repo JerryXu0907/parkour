@@ -100,7 +100,7 @@ class A1LeapCfgPPO( A1FieldCfgPPO ):
         policy_class_name = "ActorCriticRecurrent"
         experiment_name = "field_a1"
         resume = True
-        load_run = "Oct15_00-02-07_WalkForward_aScale0.5"
+        # load_run = "Oct15_00-02-07_WalkForward_aScale0.5"
         # load_run = "{Your virtually trained leap model directory}"
         # load_run = osp.join(logs_root, "field_a1_oracle/Jun04_01-03-59_Skills_leap_pEnergySubsteps2e-6_rAlive2_pPenV4e-3_pPenD4e-3_pPosY0.20_pYaw0.20_pTorqueExceedSquare1e-3_leapH0.2_propDelay0.04-0.05_noPerlinRate0.2_aScale0.5")
         # load_run = "Sep27_02-44-48_Skills_leap_propDelay0.04-0.05_pDofLimit8e-01_pCollision0.1_kp40_kd0.5fromJun04_01-03-59"

@@ -48,6 +48,8 @@ from .go1.go1_field_distill_config import Go1FieldDistillCfg, Go1FieldDistillCfg
 from .go2.go2_config import Go2RoughCfg, Go2RoughCfgPPO
 from .go2.go2_field_config import Go2FieldCfg, Go2FieldCfgPPO
 from .go2.go2_distill_config import Go2DistillCfg, Go2DistillCfgPPO
+from .base.legged_robot_parkour import LeggedRobotParkour
+from .go1.go1_parkour_config import Go1ParkourCfg, Go1ParkourCfgPPO
 
 
 import os
@@ -64,6 +66,7 @@ task_registry.register( "cassie", Cassie, CassieRoughCfg(), CassieRoughCfgPPO() 
 task_registry.register( "go1_field", LeggedRobot, Go1FieldCfg(), Go1FieldCfgPPO())
 task_registry.register( "go1_distill", LeggedRobot, Go1FieldDistillCfg(), Go1FieldDistillCfgPPO())
 task_registry.register( "go2", LeggedRobot, Go2RoughCfg(), Go2RoughCfgPPO() )
+task_registry.register( "go1_parkour", LeggedRobotParkour, Go1ParkourCfg(), Go1ParkourCfgPPO() )
 task_registry.register( "go2_field", RobotFieldNoisy, Go2FieldCfg(), Go2FieldCfgPPO() )
 task_registry.register( "go2_distill", RobotFieldNoisy, Go2DistillCfg(), Go2DistillCfgPPO() )
 
