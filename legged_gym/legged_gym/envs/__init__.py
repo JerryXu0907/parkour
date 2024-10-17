@@ -42,6 +42,7 @@ from .cassie.cassie_config import CassieRoughCfg, CassieRoughCfgPPO
 from .a1.a1_config import A1RoughCfg, A1RoughCfgPPO
 from .a1.a1_field_config import A1FieldCfg, A1FieldCfgPPO
 from .a1.a1_field_distill_config import A1FieldDistillCfg, A1FieldDistillCfgPPO
+from .a1.a1_leap_config import A1LeapCfg, A1LeapCfgPPO
 from .go1.go1_field_config import Go1FieldCfg, Go1FieldCfgPPO
 from .go1.go1_field_distill_config import Go1FieldDistillCfg, Go1FieldDistillCfgPPO
 from .go2.go2_config import Go2RoughCfg, Go2RoughCfgPPO
@@ -58,6 +59,7 @@ task_registry.register( "anymal_c_flat", Anymal, AnymalCFlatCfg(), AnymalCFlatCf
 task_registry.register( "anymal_b", Anymal, AnymalBRoughCfg(), AnymalBRoughCfgPPO() )
 task_registry.register( "a1", LeggedRobot, A1RoughCfg(), A1RoughCfgPPO() )
 task_registry.register( "a1_field", LeggedRobotField, A1FieldCfg(), A1FieldCfgPPO() )
+task_registry.register( "a1_leap", LeggedRobotField, A1LeapCfg(), A1LeapCfgPPO())
 task_registry.register( "cassie", Cassie, CassieRoughCfg(), CassieRoughCfgPPO() )
 task_registry.register( "go1_field", LeggedRobot, Go1FieldCfg(), Go1FieldCfgPPO())
 task_registry.register( "go1_distill", LeggedRobot, Go1FieldDistillCfg(), Go1FieldDistillCfgPPO())

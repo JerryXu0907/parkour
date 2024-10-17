@@ -22,7 +22,7 @@ class A1LeapCfg( A1FieldCfg ):
                 "leap",
             ],
             leap= dict(
-                length= (0.2, 0.8),
+                length= (0.2, 1.2),
                 depth= (0.4, 0.8),
                 height= 0.12,
             ),
@@ -35,10 +35,13 @@ class A1LeapCfg( A1FieldCfg ):
         ))
     
     class commands( A1FieldCfg.commands ):
+        curriculum = True
+        max_curriculum = 3.0
         class ranges( A1FieldCfg.commands.ranges ):
             lin_vel_x = [1.0, 1.5]
             lin_vel_y = [0.0, 0.0]
             ang_vel_yaw = [0., 0.]
+        lin_cmd_cutoff = 0.8
 
     class termination( A1FieldCfg.termination ):
         # additional factors that determines whether to terminates the episode
@@ -57,11 +60,11 @@ class A1LeapCfg( A1FieldCfg ):
             threshold= 2.0,
         ))
 
-    class domain_rand( A1FieldCfg.domain_rand ):
-        init_base_rot_range = dict(
-            roll= [-0.1, 0.1],
-            pitch= [-0.1, 0.1],
-        )
+    # class domain_rand( A1FieldCfg.domain_rand ):
+        # init_base_rot_range = dict(
+        #     roll= [-0.1, 0.1],
+        #     pitch= [-0.1, 0.1],
+        # )
 
     class rewards( A1FieldCfg.rewards ):
         class scales:
@@ -97,13 +100,14 @@ class A1LeapCfgPPO( A1FieldCfgPPO ):
         policy_class_name = "ActorCriticRecurrent"
         experiment_name = "field_a1"
         resume = True
-        load_run = "{Your traind walking model directory}"
-        load_run = "{Your virtually trained leap model directory}"
+        load_run = "Oct15_00-02-07_WalkForward_aScale0.5"
+        # load_run = "{Your virtually trained leap model directory}"
         # load_run = osp.join(logs_root, "field_a1_oracle/Jun04_01-03-59_Skills_leap_pEnergySubsteps2e-6_rAlive2_pPenV4e-3_pPenD4e-3_pPosY0.20_pYaw0.20_pTorqueExceedSquare1e-3_leapH0.2_propDelay0.04-0.05_noPerlinRate0.2_aScale0.5")
         # load_run = "Sep27_02-44-48_Skills_leap_propDelay0.04-0.05_pDofLimit8e-01_pCollision0.1_kp40_kd0.5fromJun04_01-03-59"
         # load_run = osp.join(logs_root, "field_a1_noTanh_oracle", "Sep27_14-56-25_Skills_leap_propDelay0.04-0.05_pEnergySubsteps-8e-06_pDofLimit8e-01_pCollision0.1_kp40_kd0.5fromSep27_02-44-48")
         # load_run = osp.join(logs_root, "field_a1_noTanh_oracle", "Oct05_02-16-22_Skills_leap_propDelay0.04-0.05_pEnergySubsteps-8e-06_pPenD8.e-3_pDofLimit4e-01_pCollision0.5_kp40_kd0.5fromSep27_14-56-25")
-        load_run = osp.join(logs_root, "field_a1_noTanh_oracle", "Oct09_09-51-58_Skills_leap_propDelay0.04-0.05_pEnergySubsteps-8e-06_pPenD1.e-2_pDofLimit4e-01_pCollision0.5_kp40_kd0.5fromOct05_02-16-22")
+        # load_run = osp.join(logs_root, "field_a1_noTanh_oracle", "Oct09_09-51-58_Skills_leap_propDelay0.04-0.05_pEnergySubsteps-8e-06_pPenD1.e-2_pDofLimit4e-01_pCollision0.5_kp40_kd0.5fromOct05_02-16-22")
+        load_run = osp.join(logs_root, "field_a1", "NewWalk")
         
         run_name = "".join(["Skills_",
         ("Multi" if len(A1LeapCfg.terrain.BarrierTrack_kwargs["options"]) > 1 else (A1LeapCfg.terrain.BarrierTrack_kwargs["options"][0] if A1LeapCfg.terrain.BarrierTrack_kwargs["options"] else "PlaneWalking")),

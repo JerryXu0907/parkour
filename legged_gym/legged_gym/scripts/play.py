@@ -80,7 +80,7 @@ def create_recording_camera(gym, env_handle,
 def play(args):
     env_cfg, train_cfg = task_registry.get_cfgs(name=args.task)
     if args.load_cfg:
-        with open(os.path.join("logs", train_cfg.runner.experiment_name, args.load_run, "config.json"), "r") as f:
+        with open(os.path.join("../logs", train_cfg.runner.experiment_name, args.load_run, "config.json"), "r") as f:
             d = json.load(f, object_pairs_hook= OrderedDict)
             update_class_from_dict(env_cfg, d, strict= True)
             update_class_from_dict(train_cfg, d, strict= True)
@@ -93,14 +93,14 @@ def play(args):
         env_cfg.terrain.num_rows = 4
         env_cfg.terrain.num_cols = 8
         env_cfg.terrain.BarrierTrack_kwargs["options"] = [
-            "jump",
-            "leap",
-            "down",
-            "hurdle",
-            "tilted_ramp",
-            "stairsup",
-            "discrete_rect",
-            "wave",
+            # "jump",
+            # "leap",
+            # "down",
+            # "hurdle",
+            # "tilted_ramp",
+            # "stairsup",
+            # "discrete_rect",
+            # "wave",
         ]
         env_cfg.terrain.BarrierTrack_kwargs["leap"]["fake_offset"] = 0.1
         env_cfg.terrain.BarrierTrack_kwargs["draw_virtual_terrain"] = True
@@ -133,7 +133,7 @@ def play(args):
     if hasattr(env_cfg.terrain, "BarrierTrack_kwargs"):
         env_cfg.terrain.BarrierTrack_kwargs["draw_virtual_terrain"] = True
     train_cfg.runner.resume = (args.load_run is not None)
-    train_cfg.runner_class_name = "OnPolicyRunner"
+    train_cfg.runner_class_name = "OnPolicyRunnerVel"
     
     if args.no_throw:
         env_cfg.init_state.pos[2] = 0.4
