@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 import torchvision.transforms as T
 
+from isaacgym.torch_utils import *
 from legged_gym.envs.base.legged_robot import LeggedRobot
 from legged_gym import LEGGED_GYM_ROOT_DIR
 from legged_gym.envs.base.base_task import BaseTask
@@ -621,6 +622,28 @@ class LeggedRobotParkour(LeggedRobot):
 
         return heights.view(self.num_envs, -1) * self.terrain.cfg.vertical_scale
     
+    def _post_physics_step_callback(self):
+        """ Callback called before computing terminations, rewards, and observations
+            Default behaviour: Compute ang vel command based on target and heading, compute measured terrain heights and randomly push robots
+        """
+        # 
+        env_ids = (self.episode_length_buf % int(self.cfg.commands.resampling_time / self.dt)==0).nonzero(as_tuple=False).flatten()
+        self._resample_commands(env_ids)
+        forward = quat_apply(self.base_quat, self.target_pos_rel)
+        heading = torch.atan2(forward[:, 1], forward[:, 0])
+        self.commands[:, 2] = torch.clip(0.5*wrap_to_pi(self.commands[:, 3] - heading), -1., 1.)
+
+        # log max power across current env step
+        self.max_power_per_timestep = torch.maximum(
+            self.max_power_per_timestep,
+            torch.max(torch.sum(self.substep_torques * self.substep_dof_vel, dim= -1), dim= -1)[0],
+        )
+
+        if self.cfg.terrain.measure_heights:
+            self.measured_heights = self._get_heights()
+        if self.cfg.domain_rand.push_robots and  (self.common_step_counter % self.cfg.domain_rand.push_interval == 0):
+            self._push_robots()
+
     # ---------- Setting Goals ---------
     def _init_goals(self):
         self.terrain_goals = torch.from_numpy(self.terrain.goals[:, :, 0]).to(self.device).to(torch.float)
@@ -755,9 +778,13 @@ class LeggedRobotParkour(LeggedRobot):
         obs = torch.cat(obs, dim= 1)
         return obs
     
+    def _get_commands_obs(self, privileged= False):
+        self.delta_yaw = self.target_yaw - self.yaw  
+        self.commands[:, 2] = self.delta_yaw 
+        return self.commands[:, :3]
+
     def _get_proprioception_obs(self, privileged= False):
         imu_obs = torch.stack((self.roll, self.pitch), dim=1)
-        self.delta_yaw = self.target_yaw - self.yaw     
         obs_buf = torch.cat([
             self._get_lin_vel_obs(),
             self._get_ang_vel_obs(),
@@ -903,12 +930,11 @@ class LeggedRobotParkour(LeggedRobot):
         return torch.norm((self.commands[:, :2] - self.base_lin_vel[:, :2]), dim= 1)
 
     def _reward_world_vel_l2norm(self):
-        lin_vel_error = torch.square(self.commands[:, 0] - self.root_states[:, 7]) + torch.square(self.root_states[:, 8])
-        return torch.sqrt(lin_vel_error)
+        return torch.norm((self.commands[:, :2] - self.base_lin_vel[:, :2]), dim= 1)
 
     def _reward_tracking_world_vel(self):
-        world_vel_error = torch.square(self.commands[:, 0] - self.root_states[:, 7]) + torch.square(self.root_states[:, 8])
-        return torch.exp(-world_vel_error/self.cfg.rewards.tracking_sigma)
+        lin_vel_error = torch.sum(torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1)
+        return torch.exp(-lin_vel_error/self.cfg.rewards.tracking_sigma)
 
     def _reward_legs_energy(self):
         return torch.sum(torch.square(self.torques * self.dof_vel), dim=1)
@@ -1201,10 +1227,10 @@ class LeggedRobotParkour(LeggedRobot):
             base_pos = (self.root_states[i, :3]).cpu().numpy()
             heights = self.measured_heights[i].cpu().numpy()
             height_points = quat_apply_yaw(self.base_quat[i].repeat(heights.shape[0]), self.height_points[i]).cpu().numpy()
-            # for j in range(heights.shape[0]):
-            #     x = height_points[j, 0] + base_pos[0]
-            #     y = height_points[j, 1] + base_pos[1]
-            #     z = heights[j]
-            #     sphere_pose = gymapi.Transform(gymapi.Vec3(x, y, z), r=None)
-            #     gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], sphere_pose)
+            for j in range(heights.shape[0]):
+                x = height_points[j, 0] + base_pos[0]
+                y = height_points[j, 1] + base_pos[1]
+                z = heights[j]
+                sphere_pose = gymapi.Transform(gymapi.Vec3(x, y, z), r=None)
+                gymutil.draw_lines(sphere_geom, self.gym, self.viewer, self.envs[i], sphere_pose)
         # x = input()

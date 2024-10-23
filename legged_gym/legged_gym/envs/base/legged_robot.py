@@ -345,7 +345,39 @@ class LeggedRobot(BaseTask):
         height_offset = getattr(self.cfg.normalization, "height_measurements_offset", -0.5)
         heights = torch.clip(self.root_states[:, 2].unsqueeze(1) + height_offset - self.measured_heights, -1, 1.)
         return heights
-
+    
+    def _get_proprioception_obs(self, privileged= False):
+        # imu_obs = torch.stack((self.roll, self.pitch), dim=1)
+        obs_buf = torch.cat([
+            self._get_lin_vel_obs(),
+            self._get_ang_vel_obs(),
+            self._get_projected_gravity_obs(),
+            self._get_commands_obs(),
+            self._get_dof_pos_obs(),
+            self._get_dof_vel_obs(),
+            self._get_last_actions_obs(),
+        ], dim=-1)
+        # obs_buf = torch.cat((
+        #                     self.base_lin_vel * self.obs_scales.lin_vel,    # 3
+        #                     self.base_ang_vel  * self.obs_scales.ang_vel,   # 3
+        #                     imu_obs,    # 2
+        #                     self.delta_yaw[:, None],            # 1       
+        #                     self.commands[:, 0:1],      # 1
+        #                     (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,   #  12
+        #                     self.dof_vel * self.obs_scales.dof_vel,     #  12
+        #                     self.last_actions,                          #  12
+        #                     self.contact_filt.float()-0.5,              #  4
+        #                     ),dim=-1)
+        # self.obs_history_buf = torch.where(
+        #     (self.episode_length_buf <= 1)[:, None, None], 
+        #     torch.stack([obs_buf] * self.cfg.env.history_len, dim=1),
+        #     torch.cat([
+        #         self.obs_history_buf[:, 1:],
+        #         obs_buf.unsqueeze(1)
+        #     ], dim=1)
+        # )
+        return obs_buf
+    
     def _get_base_pose_obs(self, privileged= False):
         roll, pitch, yaw = get_euler_xyz(self.root_states[:, 3:7])
         roll[roll > np.pi] -= np.pi * 2 # to range (-pi, pi)
@@ -382,6 +414,8 @@ class LeggedRobot(BaseTask):
         corresponding order.
         """
         segments = OrderedDict()
+        if "proprioception" in components:
+            segments['proprioception'] = (48,)
         if "lin_vel" in components:
             segments["lin_vel"] = (3,)
         if "ang_vel" in components:
@@ -485,20 +519,21 @@ class LeggedRobot(BaseTask):
         if components is None:
             return None
         else:
-            # if "proprioception" in components:
-            #     # backward compatibile for proprioception obs components
-            #     print("\033[1;36m Warning: proprioception is deprecated, use lin_vel, ang_vel, projected_gravity, commands, dof_pos, dof_vel, last_actions instead.\033[0;0m")
-            #     components.remove("proprioception")
-            #     components += ["lin_vel", "ang_vel", "projected_gravity", "commands", "dof_pos", "dof_vel", "last_actions"]
+            if "proprioception" in components and getattr(self, "_get_proprioception_obs", None) is None:
+                # backward compatibile for proprioception obs components
+                print("\033[1;36m Warning: proprioception is deprecated, use lin_vel, ang_vel, projected_gravity, commands, dof_pos, dof_vel, last_actions instead.\033[0;0m")
+                components.remove("proprioception")
+                components += ["lin_vel", "ang_vel", "projected_gravity", "commands", "dof_pos", "dof_vel", "last_actions"]
             return self.get_obs_segment_from_components(components)
     @property
     def num_obs(self):
         """ get this value from self.cfg.env """
-        # if "proprioception" in self.cfg.env.obs_components:
-        #     # backward compatibile for proprioception obs components
-        #     print("\033[1;36m Warning: proprioception is deprecated, use lin_vel, ang_vel, projected_gravity, commands, dof_pos, dof_vel, last_actions instead.\033[0;0m")
-        #     self.cfg.env.obs_components.remove("proprioception")
-        #     self.cfg.env.obs_components = ["lin_vel", "ang_vel", "projected_gravity", "commands", "dof_pos", "dof_vel", "last_actions"] + self.cfg.env.obs_components
+        if "proprioception" in self.cfg.env.obs_components and getattr(self, "_get_proprioception_obs", None) is None:
+            print("\n\nhere\n\n")
+            # backward compatibile for proprioception obs components
+            print("\033[1;36m Warning: proprioception is deprecated, use lin_vel, ang_vel, projected_gravity, commands, dof_pos, dof_vel, last_actions instead.\033[0;0m")
+            self.cfg.env.obs_components.remove("proprioception")
+            self.cfg.env.obs_components = ["lin_vel", "ang_vel", "projected_gravity", "commands", "dof_pos", "dof_vel", "last_actions"] + self.cfg.env.obs_components
         # return self.get_num_obs_from_components(self.cfg.env.obs_components)
         return self.cfg.env.num_observations
     @num_obs.setter
@@ -937,6 +972,15 @@ class LeggedRobot(BaseTask):
 
     def _write_last_actions_noise(self, noise_vec):
         noise_vec[:] = 0.
+
+    def _write_proprioception_noise(self, noise_vec):
+        noise_vec[:3] = self.cfg.noise.noise_scales.lin_vel * self.cfg.noise.noise_level * self.obs_scales.lin_vel
+        noise_vec[3:6] = self.cfg.noise.noise_scales.ang_vel * self.cfg.noise.noise_level * self.obs_scales.ang_vel
+        noise_vec[6:9] = self.cfg.noise.noise_scales.gravity * self.cfg.noise.noise_level
+        noise_vec[9:12] = 0
+        noise_vec[12:24] = self.cfg.noise.noise_scales.dof_pos * self.cfg.noise.noise_level * self.obs_scales.dof_pos
+        noise_vec[24:36] = self.cfg.noise.noise_scales.dof_vel * self.cfg.noise.noise_level * self.obs_scales.dof_vel
+        noise_vec[36:] = 0
 
     def _write_height_measurements_noise(self, noise_vec):
         noise_scales = self.cfg.noise.noise_scales
@@ -1526,7 +1570,7 @@ class LeggedRobot(BaseTask):
 
     def _draw_commands_vis(self):
         """ """
-        xy_commands = (self.commands[:, :3] * getattr(self.obs_scales, "commands", 1.)).clone()
+        xy_commands = (self.commands[:, :3] * torch.tensor(getattr(self.obs_scales, "commands", 1.)).to(self.commands.device)).clone()
         yaw_commands = xy_commands.clone()
         xy_commands[:, 2] = 0.
         yaw_commands[:, :2] = 0.

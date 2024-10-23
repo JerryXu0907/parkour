@@ -94,7 +94,7 @@ def play(args):
         env_cfg.terrain.num_cols = 8
         env_cfg.terrain.BarrierTrack_kwargs["options"] = [
             # "jump",
-            "leap",
+            # "leap",
             # "down",
             # "hurdle",
             # "tilted_ramp",

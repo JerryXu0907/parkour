@@ -28,15 +28,27 @@ class Go2RoughCfg( LeggedRobotCfg ):
         episode_length_s = 20 # episode length in seconds
 
         obs_components = [
-            "lin_vel",
-            "ang_vel",
-            "projected_gravity",
-            "commands",
-            "dof_pos",
-            "dof_vel",
-            "last_actions",
+            # "lin_vel",
+            # "ang_vel",
+            # "projected_gravity",
+            # "commands",
+            # "dof_pos",
+            # "dof_vel",
+            # "last_actions",
+            "proprioception"
             "height_measurements",
         ]
+        n_proprio = 48
+        n_scan = 231#187
+        # n_base = 6
+        # n_priv_latent = n_robot_config = 1 + 3 + 1 + 12
+        # # n_goal = 3 + 3 + 3
+        # n_priv = n_priv_explicit = n_base# + n_goal
+        # # n_priv = 3+3 +3
+        # # n_priv_latent = 4 + 1 + 12 +12
+        # # n_proprio = 3 + 2 + 3 + 4 + 36 + 5
+        history_len = 10
+        num_observations = n_proprio + n_scan# + n_priv_latent + n_priv_explicit
 
     class sensor:
         class proprioception:

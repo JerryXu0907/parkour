@@ -212,7 +212,7 @@ class Terrain:
         
         if np.abs(goal_vec[-1]) > 0.1:
             platform_height = parkour_step_terrain(terrain, num_stones=1, step_height=goal_vec[-1] * difficulty)
-            platform_height = 0. if goal_vec[-1] > 0. else -goal_vec[-1]
+            platform_height = 0. if goal_vec[-1] > 0. else -goal_vec[-1] * difficulty
             self.add_roughness(terrain)
         else:
             gap_size = 0.1 + difficulty * 1.

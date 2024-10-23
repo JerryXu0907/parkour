@@ -49,7 +49,7 @@ class Go1ParkourCfg(LeggedRobotCfg):
             # "prop_history",     # history
         ]
         n_proprio = 48
-        n_scan = 187
+        n_scan = 132#187
         n_base = 6
         n_priv_latent = n_robot_config = 1 + 3 + 1 + 12
         # n_goal = 3 + 3 + 3
@@ -149,8 +149,10 @@ class Go1ParkourCfg(LeggedRobotCfg):
         dynamic_friction = 1.0
         restitution = 0.
         measure_heights = True
-        measured_points_x = [-0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8] # 1mx1.6m rectangle (without center line)
-        measured_points_y = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5]
+        # measured_points_x = [-0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8] # 1mx1.6m rectangle (without center line)
+        # measured_points_y = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5]
+        measured_points_x = [-0.45, -0.3, -0.15, 0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1.05, 1.2] # 1mx1.6m rectangle (without center line)
+        measured_points_y = [-0.75, -0.6, -0.45, -0.3, -0.15, 0., 0.15, 0.3, 0.45, 0.6, 0.75]
         measure_horizontal_noise = 0.0
 
         selected = False # select a unique terrain type and pass all arguments
@@ -271,15 +273,17 @@ class Go1ParkourCfg(LeggedRobotCfg):
             # tracking_ang_vel = 0.05
             tracking_world_vel = 1.
             # goal_dir_move = 2.
-            legs_energy_substeps = -2e-5
-            exceed_dof_pos_limits = -8e-1
-            exceed_torque_limits_l1norm = -8e-1
+            legs_energy_substeps = -2e-7
+            exceed_dof_pos_limits = -.1
+            exceed_torque_limits_l1norm = -.1
+            lazy_stop=-2
+            stand_still=-1
             orientation = -4.
             dof_acc = -2.5e-7
             collision = -10.
             action_rate = -0.05
             delta_torques = -1e-7
-            torques = -1.e-5
+            torques = -1.e-7
             hip_pos = -0.4
             dof_error = -0.04
             # goal_vel_align = 5.

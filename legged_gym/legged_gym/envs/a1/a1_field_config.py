@@ -16,15 +16,15 @@ class A1FieldCfg( A1RoughCfg ):
         # privileged_use_lin_vel = True # for the possible of setting "proprioception" in obs and privileged obs different
         num_envs = 4096
         obs_components = [
-            "proprioception", # 44
+            "proprioception", # 48
             "height_measurements", # 132
             "base_pose",        # explicit
             "robot_config",     # latent
             # "goal",             # goal
             # "prop_history",     # history
         ]
-        n_proprio = 44
-        n_scan = 187
+        n_proprio = 48
+        n_scan = 132#87
         n_base = 6
         n_priv_latent = n_robot_config = 1 + 3 + 1 + 12
         # n_goal = 3 + 3 + 3
